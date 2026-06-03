@@ -28,9 +28,18 @@ interface Product {
   updated_at: string;
 }
 
+interface RecipeIngredient {
+  id: string;
+  product_id: string;
+  material_id: string;
+  quantity_needed: number;
+}
+
 export default function Paradose() {
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [recipes, setRecipes] = useState<RecipeIngredient[]>([]);
+  const [editRecipeItems, setEditRecipeItems] = useState<{ material_id: string; quantity_needed: number }[]>([]);
   const [isAddMaterialModalOpen, setIsAddMaterialModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -84,9 +93,27 @@ export default function Paradose() {
         .eq("brand", "Paradose");
       if (productsError) throw productsError;
       if (productsData) setProducts(productsData);
+
+      // Load recipe ingredients
+      const { data: recipesData, error: recipesError } = await supabase
+        .from("recipe_ingredients")
+        .select("*");
+      if (recipesError) throw recipesError;
+      if (recipesData) setRecipes(recipesData);
     } catch (error) {
       console.error("Error loading stocks:", error);
     }
+  };
+
+  const getProductStock = (product: Product) => {
+    const prodRecipes = recipes.filter(r => r.product_id === product.id);
+    if (prodRecipes.length === 0) return product.stock;
+    const stocks = prodRecipes.map(r => {
+      const mat = rawMaterials.find(m => m.id === r.material_id);
+      if (!mat) return 0;
+      return Math.floor(mat.current_stock / r.quantity_needed);
+    });
+    return Math.min(...stocks);
   };
 
   const saveChanges = async () => {
@@ -115,12 +142,33 @@ export default function Paradose() {
           const { error } = await supabase
             .from("products")
             .update({
-              stock: product.stock,
+              stock: getProductStock(product),
               min_stock: product.min_stock,
               updated_at: new Date().toISOString(),
             })
             .eq("id", product.id);
           if (error) throw error;
+
+          // Delete old recipe ingredients
+          const { error: deleteError } = await supabase
+            .from("recipe_ingredients")
+            .delete()
+            .eq("product_id", product.id);
+          if (deleteError) throw deleteError;
+
+          // Insert new recipe ingredients
+          const prodRecipes = recipes.filter(r => r.product_id === product.id && r.material_id && r.quantity_needed > 0);
+          if (prodRecipes.length > 0) {
+            const inserts = prodRecipes.map(r => ({
+              product_id: r.product_id,
+              material_id: r.material_id,
+              quantity_needed: r.quantity_needed
+            }));
+            const { error: insertError } = await supabase
+              .from("recipe_ingredients")
+              .insert(inserts);
+            if (insertError) throw insertError;
+          }
         }
       }
 
@@ -136,15 +184,7 @@ export default function Paradose() {
     }
   };
 
-  const updateProductStock = (id: string, delta: number) => {
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, stock: Math.max(0, p.stock + delta) } : p,
-      ),
-    );
-    setChangedProductIds((prev) => new Set(prev).add(id));
-    setHasChanges(true);
-  };
+
 
   const updateMaterialStock = (id: string, delta: number) => {
     setRawMaterials((prev) =>
@@ -207,6 +247,12 @@ export default function Paradose() {
       current_stock: product.stock,
       min_stock: product.min_stock,
     });
+    // Load recipe items for this product
+    const prodRecipes = recipes.filter(r => r.product_id === product.id);
+    setEditRecipeItems(prodRecipes.map(r => ({
+      material_id: r.material_id,
+      quantity_needed: r.quantity_needed
+    })));
     setIsEditModalOpen(true);
   };
 
@@ -219,6 +265,7 @@ export default function Paradose() {
       current_stock: material.current_stock,
       min_stock: material.min_stock,
     });
+    setEditRecipeItems([]);
     setIsEditModalOpen(true);
   };
 
@@ -226,12 +273,31 @@ export default function Paradose() {
     if (!editingItemId) return;
 
     if (editingItemType === "product") {
+      // Check duplicate recipe items
+      const selectedMaterials = editRecipeItems.map(item => item.material_id).filter(Boolean);
+      const hasDuplicates = new Set(selectedMaterials).size !== selectedMaterials.length;
+      if (hasDuplicates) {
+        toast.error("Bahan baku tidak boleh duplikat dalam resep!");
+        return;
+      }
+
+      // Update recipes state locally
+      const otherRecipes = recipes.filter(r => r.product_id !== editingItemId);
+      const newRecipes = editRecipeItems
+        .filter(item => item.material_id && item.quantity_needed > 0)
+        .map((item, index) => ({
+          id: `temp_${index}_${Date.now()}`,
+          product_id: editingItemId,
+          material_id: item.material_id,
+          quantity_needed: item.quantity_needed
+        }));
+      setRecipes([...otherRecipes, ...newRecipes]);
+
       setProducts((prev) =>
         prev.map((p) =>
           p.id === editingItemId
             ? {
               ...p,
-              stock: editForm.current_stock,
               min_stock: editForm.min_stock,
             }
             : p,
@@ -318,7 +384,7 @@ export default function Paradose() {
     }
   };
 
-  const totalProducts = products.reduce((sum, p) => sum + p.stock, 0);
+  const totalProducts = products.reduce((sum, p) => sum + getProductStock(p), 0);
   const totalRawMaterials = rawMaterials.reduce(
     (sum, m) => sum + m.current_stock,
     0,
@@ -454,6 +520,7 @@ export default function Paradose() {
           <div className="grid grid-cols-2 gap-6">
             {products.map((product) => {
               const unit = getProductUnit(product.category);
+              const computedStock = getProductStock(product);
               return (
                 <div
                   key={product.id}
@@ -484,7 +551,7 @@ export default function Paradose() {
                         Updated: {formatDate(product.updated_at)}
                       </p>
                     </div>
-                    {product.stock <= product.min_stock && (
+                    {computedStock <= product.min_stock && (
                       <div className="bg-[#fef2f2] rounded-[4px] px-2 py-1 flex items-center gap-1">
                         <AlertCircle className="w-4 h-4 text-[#e7000b]" />
                         <span
@@ -501,7 +568,7 @@ export default function Paradose() {
                       className="text-[30px] font-semibold leading-[36px] text-[#101828]"
                       style={{ fontFamily: "Inter, sans-serif" }}
                     >
-                      {product.stock}{" "}
+                      {computedStock}{" "}
                       <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
                         {unit}
                       </span>
@@ -517,30 +584,15 @@ export default function Paradose() {
                     <div
                       className="h-[8px] rounded-full"
                       style={{
-                        width: `${getProgressPercentage(product.stock, product.min_stock)}%`,
+                        width: `${getProgressPercentage(computedStock, product.min_stock)}%`,
                         backgroundColor: getProgressColor(
-                          product.stock,
+                          computedStock,
                           product.min_stock,
                         ),
                       }}
                     />
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => updateProductStock(product.id, -1)}
-                      className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px] text-[#0a0a0a]"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      - Use
-                    </button>
-                    <button
-                      onClick={() => updateProductStock(product.id, 1)}
-                      className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px]"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      + Restock
-                    </button>
-                  </div>
+
                 </div>
               );
             })}
@@ -739,33 +791,35 @@ export default function Paradose() {
                 </div>
               )}
 
-              <div>
-                <label
-                  className="block text-[14px] font-medium text-[#364153] mb-2"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Stok Saat Ini
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={
-                    editForm.current_stock === 0 ? "" : editForm.current_stock
-                  }
-                  onChange={(e) =>
-                    setEditForm({
-                      ...editForm,
-                      current_stock:
-                        e.target.value === ""
-                          ? 0
-                          : parseInt(e.target.value) || 0,
-                    })
-                  }
-                  placeholder="0"
-                  className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                />
-              </div>
+              {editingItemType === "material" && (
+                <div>
+                  <label
+                    className="block text-[14px] font-medium text-[#364153] mb-2"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    Stok Saat Ini
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={
+                      editForm.current_stock === 0 ? "" : editForm.current_stock
+                    }
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        current_stock:
+                          e.target.value === ""
+                            ? 0
+                            : parseInt(e.target.value) || 0,
+                      })
+                    }
+                    placeholder="0"
+                    className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  />
+                </div>
+              )}
 
               <div>
                 <label
@@ -792,6 +846,96 @@ export default function Paradose() {
                   style={{ fontFamily: "Inter, sans-serif" }}
                 />
               </div>
+
+              {editingItemType === "product" && (
+                <div className="border-t border-[#e5e7eb] pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-[16px] font-semibold text-[#101828]" style={{ fontFamily: "Inter, sans-serif" }}>
+                      Resep Produk (Bahan Baku)
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setEditRecipeItems(prev => [...prev, { material_id: "", quantity_needed: 0 }])}
+                      className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1.5 rounded-[8px] text-[12px] font-semibold flex items-center gap-1 transition"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Materials
+                    </button>
+                  </div>
+                  
+                  {editRecipeItems.length === 0 ? (
+                    <p className="text-[13px] text-gray-500 italic" style={{ fontFamily: "Inter, sans-serif" }}>
+                      Belum ada bahan baku yang ditambahkan ke resep.
+                    </p>
+                  ) : (
+                    <div className="space-y-3 max-h-[200px] overflow-y-auto pr-1">
+                      {editRecipeItems.map((item, index) => {
+                        const selectedMaterial = rawMaterials.find(m => m.id === item.material_id);
+                        const filteredMaterials = rawMaterials.filter(
+                          m => m.brand === "Paradose" || m.brand === "Shared"
+                        );
+                        
+                        return (
+                          <div key={index} className="flex items-end gap-3 bg-gray-50 p-3 rounded-[8px] border border-gray-200">
+                            <div className="flex-1">
+                              <label className="block text-[11px] font-medium text-gray-500 mb-1" style={{ fontFamily: "Inter, sans-serif" }}>
+                                Bahan Baku *
+                              </label>
+                              <select
+                                required
+                                value={item.material_id}
+                                onChange={(e) => setEditRecipeItems(prev => prev.map((it, i) => i === index ? { ...it, material_id: e.target.value } : it))}
+                                className="w-full px-3 py-1.5 border border-gray-300 rounded-[8px] text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                style={{ fontFamily: "Inter, sans-serif" }}
+                              >
+                                <option value="">Pilih bahan...</option>
+                                {filteredMaterials.map(mat => (
+                                  <option key={mat.id} value={mat.id}>{mat.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                            
+                            <div className="w-24">
+                              <label className="block text-[11px] font-medium text-gray-500 mb-1" style={{ fontFamily: "Inter, sans-serif" }}>
+                                Jumlah *
+                              </label>
+                              <input
+                                type="number"
+                                required
+                                min="0.001"
+                                step="any"
+                                value={item.quantity_needed || ""}
+                                onChange={(e) => setEditRecipeItems(prev => prev.map((it, i) => i === index ? { ...it, quantity_needed: parseFloat(e.target.value) || 0 } : it))}
+                                placeholder="Jumlah"
+                                className="w-full px-3 py-1.5 border border-gray-300 rounded-[8px] text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                style={{ fontFamily: "Inter, sans-serif" }}
+                              />
+                            </div>
+                            
+                            <div className="w-16">
+                              <label className="block text-[11px] font-medium text-gray-500 mb-1" style={{ fontFamily: "Inter, sans-serif" }}>
+                                Satuan
+                              </label>
+                              <div className="px-2 py-1.5 bg-gray-100 rounded-[8px] text-[12px] text-gray-700 border border-gray-200 min-h-[38px] flex items-center justify-center font-medium" style={{ fontFamily: "Inter, sans-serif" }}>
+                                {selectedMaterial?.unit || "-"}
+                              </div>
+                            </div>
+                            
+                            <button
+                              type="button"
+                              onClick={() => setEditRecipeItems(prev => prev.filter((_, i) => i !== index))}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-[8px] transition-colors mb-[2px]"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3 p-6 border-t border-[#e5e7eb]">

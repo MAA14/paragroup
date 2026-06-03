@@ -15,23 +15,68 @@ interface Product {
   description: string;
 }
 
+interface RawMaterial {
+  id: string;
+  name: string;
+  brand: string;
+  unit: string;
+  current_stock: number;
+  min_stock: number;
+}
+
+interface RecipeIngredient {
+  id: string;
+  product_id: string;
+  material_id: string;
+  quantity_needed: number;
+}
+
 export default function Products() {
   const [products, setProducts] = useState<Product[]>([]);
-  // loading state removed
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [recipes, setRecipes] = useState<RecipeIngredient[]>([]);
+  const [recipeItems, setRecipeItems] = useState<{ material_id: string; quantity_needed: number }[]>([]);
 
   useEffect(() => {
     fetchProducts();
   }, []);
 
   const fetchProducts = async () => {
-    const { data, error } = await supabase
-      .from("products")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (error) {
-      toast.error("Gagal memuat produk dari database");
-    } else if (data) {
-      setProducts(data as Product[]);
+    try {
+      const [prodRes, matRes, recRes] = await Promise.all([
+        supabase.from("products").select("*").order("created_at", { ascending: false }),
+        supabase.from("raw_materials").select("*"),
+        supabase.from("recipe_ingredients").select("*")
+      ]);
+
+      if (prodRes.error) throw prodRes.error;
+      if (matRes.error) throw matRes.error;
+      if (recRes.error) throw recRes.error;
+
+      const rawMats = (matRes.data || []) as RawMaterial[];
+      const recIngs = (recRes.data || []) as RecipeIngredient[];
+
+      setRawMaterials(rawMats);
+      setRecipes(recIngs);
+
+      const prods = (prodRes.data || []) as Product[];
+      const computedProducts = prods.map(product => {
+        const prodRecipes = recIngs.filter(r => r.product_id === product.id);
+        if (prodRecipes.length === 0) {
+          return { ...product, stock: 0 };
+        }
+        const stocks = prodRecipes.map(r => {
+          const mat = rawMats.find(m => m.id === r.material_id);
+          if (!mat) return 0;
+          return Math.floor(mat.current_stock / r.quantity_needed);
+        });
+        return { ...product, stock: Math.min(...stocks) };
+      });
+
+      setProducts(computedProducts);
+    } catch (error: any) {
+      toast.error("Gagal memuat data dari database");
+      console.error("fetchProducts error:", error);
     }
   };
 
@@ -43,7 +88,6 @@ export default function Products() {
     brand: "Paradose",
     category: "coffee",
     price: 0,
-    stock: 0,
     min_stock: 0,
     description: "",
   });
@@ -61,10 +105,10 @@ export default function Products() {
       brand: "Paradose",
       category: "coffee",
       price: 0,
-      stock: 0,
       min_stock: 0,
       description: "",
     });
+    setRecipeItems([]);
     setIsModalOpen(true);
   };
 
@@ -75,11 +119,43 @@ export default function Products() {
       brand: product.brand,
       category: product.category,
       price: product.price,
-      stock: product.stock,
       min_stock: product.min_stock,
       description: product.description,
     });
+
+    // Load recipe items for this product
+    const prodRecipes = recipes.filter(r => r.product_id === product.id);
+    setRecipeItems(prodRecipes.map(r => ({
+      material_id: r.material_id,
+      quantity_needed: r.quantity_needed
+    })));
     setIsModalOpen(true);
+  };
+
+  const handleBrandChange = (newBrand: string) => {
+    setFormData((prev) => ({ ...prev, brand: newBrand }));
+    // Filter out recipe items that are not of the selected brand or Shared
+    setRecipeItems((prev) =>
+      prev.filter((item) => {
+        const mat = rawMaterials.find((m) => m.id === item.material_id);
+        return !mat || mat.brand === newBrand || mat.brand === "Shared";
+      }),
+    );
+  };
+
+  const handleAddRecipeItem = () => {
+    setRecipeItems(prev => [...prev, { material_id: "", quantity_needed: 0 }]);
+  };
+
+  const handleRemoveRecipeItem = (index: number) => {
+    setRecipeItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRecipeItemChange = (index: number, field: 'material_id' | 'quantity_needed', value: any) => {
+    setRecipeItems(prev => prev.map((item, i) => {
+      if (i !== index) return item;
+      return { ...item, [field]: value };
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -101,15 +177,6 @@ export default function Products() {
     }
 
     if (
-      formData.stock === null ||
-      formData.stock === undefined ||
-      formData.stock < 0
-    ) {
-      toast.error("Stok harus berupa angka positif!");
-      return;
-    }
-
-    if (
       formData.min_stock === null ||
       formData.min_stock === undefined ||
       formData.min_stock < 0
@@ -118,39 +185,99 @@ export default function Products() {
       return;
     }
 
+    // Check duplicate recipe items
+    const selectedMaterials = recipeItems.map(item => item.material_id).filter(Boolean);
+    const hasDuplicates = new Set(selectedMaterials).size !== selectedMaterials.length;
+    if (hasDuplicates) {
+      toast.error("Bahan baku tidak boleh duplikat dalam resep!");
+      return;
+    }
+
+    // Calculate max stock based on selected recipe items and raw materials
+    let calculatedStock = 0;
+    if (recipeItems.length > 0) {
+      const stocks = recipeItems.map(item => {
+        if (!item.material_id) return 0;
+        const mat = rawMaterials.find(m => m.id === item.material_id);
+        return mat ? Math.floor(mat.current_stock / item.quantity_needed) : 0;
+      });
+      calculatedStock = Math.min(...stocks);
+    }
+
+    const productData = {
+      name: formData.name,
+      brand: formData.brand,
+      category: formData.category,
+      price: formData.price,
+      stock: calculatedStock,
+      min_stock: formData.min_stock,
+      description: formData.description,
+    };
+
     try {
       if (editingProduct) {
+        // Update product
         const { error } = await supabase
           .from("products")
-          .update(formData)
+          .update(productData)
           .eq("id", editingProduct.id);
-        if (error) {
-          console.error("Update error:", error);
-          toast.error("Gagal memperbarui produk: " + error.message);
-        } else {
-          toast.success("Produk berhasil diperbarui!");
-          setIsModalOpen(false);
-          fetchProducts();
+        if (error) throw error;
+
+        // Delete old recipe ingredients
+        const { error: deleteError } = await supabase
+          .from("recipe_ingredients")
+          .delete()
+          .eq("product_id", editingProduct.id);
+        if (deleteError) throw deleteError;
+
+        // Insert new recipe ingredients
+        const validRecipeItems = recipeItems.filter(item => item.material_id && item.quantity_needed > 0);
+        if (validRecipeItems.length > 0) {
+          const inserts = validRecipeItems.map(item => ({
+            product_id: editingProduct.id,
+            material_id: item.material_id,
+            quantity_needed: item.quantity_needed
+          }));
+          const { error: insertError } = await supabase
+            .from("recipe_ingredients")
+            .insert(inserts);
+          if (insertError) throw insertError;
         }
+
+        toast.success("Produk berhasil diperbarui!");
+        setIsModalOpen(false);
+        fetchProducts();
       } else {
+        const newProductId = `p${Date.now()}`;
         const newProduct = {
-          id: `p${Date.now()}`,
-          ...formData,
+          id: newProductId,
+          ...productData,
           created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         };
         const { error } = await supabase.from("products").insert([newProduct]);
-        if (error) {
-          console.error("Insert error:", error);
-          toast.error("Gagal menambahkan produk: " + error.message);
-        } else {
-          toast.success("Produk berhasil ditambahkan!");
-          setIsModalOpen(false);
-          fetchProducts();
+        if (error) throw error;
+
+        const validRecipeItems = recipeItems.filter(item => item.material_id && item.quantity_needed > 0);
+        if (validRecipeItems.length > 0) {
+          const inserts = validRecipeItems.map(item => ({
+            product_id: newProductId,
+            material_id: item.material_id,
+            quantity_needed: item.quantity_needed
+          }));
+          const { error: insertError } = await supabase
+            .from("recipe_ingredients")
+            .insert(inserts);
+          if (insertError) throw insertError;
         }
+
+        toast.success("Produk berhasil ditambahkan!");
+        setIsModalOpen(false);
+        fetchProducts();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Submit error:", error);
-      toast.error("Terjadi kesalahan saat menyimpan produk");
+      toast.error("Gagal menyimpan produk: " + (error.message || error));
     }
   };
 
@@ -227,7 +354,7 @@ export default function Products() {
                     Harga
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Stok
+                    Maks/Min Stok
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                     Status
@@ -342,7 +469,7 @@ export default function Products() {
                     required
                     value={formData.brand}
                     onChange={(e) =>
-                      setFormData({ ...formData, brand: e.target.value })
+                      handleBrandChange(e.target.value)
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
@@ -385,7 +512,7 @@ export default function Products() {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Harga (Rp) *
@@ -399,25 +526,6 @@ export default function Products() {
                       setFormData({
                         ...formData,
                         price: parseInt(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Stok *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    value={formData.stock || ""}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        stock: parseInt(e.target.value) || 0,
                       })
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -442,6 +550,82 @@ export default function Products() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                   />
                 </div>
+              </div>
+
+              {/* Recipe Ingredients Section */}
+              <div className="border-t border-gray-200 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900">Resep Produk (Bahan Baku)</h3>
+                  <button
+                    type="button"
+                    onClick={handleAddRecipeItem}
+                    className="bg-purple-50 hover:bg-purple-100 text-purple-700 px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Materials
+                  </button>
+                </div>
+
+                {recipeItems.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic">Belum ada bahan baku yang ditambahkan ke resep.</p>
+                ) : (
+                  <div className="space-y-3 max-h-[200px] overflow-y-auto pr-1">
+                    {recipeItems.map((item, index) => {
+                      const selectedMaterial = rawMaterials.find(m => m.id === item.material_id);
+                      const filteredMaterials = rawMaterials.filter(
+                        m => m.brand === formData.brand || m.brand === 'Shared'
+                      );
+
+                      return (
+                        <div key={index} className="flex items-end gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200 animate-fadeIn">
+                          <div className="flex-1">
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Bahan Baku *</label>
+                            <select
+                              required
+                              value={item.material_id}
+                              onChange={(e) => handleRecipeItemChange(index, 'material_id', e.target.value)}
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                            >
+                              <option value="">Pilih bahan baku...</option>
+                              {filteredMaterials.map(mat => (
+                                <option key={mat.id} value={mat.id}>{mat.name}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="w-28">
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Jumlah *</label>
+                            <input
+                              type="number"
+                              required
+                              min="0.001"
+                              step="any"
+                              value={item.quantity_needed || ""}
+                              onChange={(e) => handleRecipeItemChange(index, 'quantity_needed', parseFloat(e.target.value) || 0)}
+                              placeholder="Jumlah"
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                          </div>
+
+                          <div className="w-20">
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Satuan</label>
+                            <div className="px-3 py-1.5 bg-gray-100 rounded-lg text-sm text-gray-700 border border-gray-200 min-h-[38px] flex items-center justify-center font-medium">
+                              {selectedMaterial?.unit || "-"}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveRecipeItem(index)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors mb-[2px]"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 pt-4">

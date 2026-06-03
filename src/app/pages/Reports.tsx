@@ -282,10 +282,10 @@ export default function Reports() {
       : selectedBrand === "parasoes"
         ? displayData.parasoes.revenue || 0
         : (displayData.paradose.revenue || 0) +
-          (displayData.parasoes.revenue || 0) +
-          (displayData.online.shopee.revenue || 0) +
-          (displayData.online.gofood.revenue || 0) +
-          (displayData.online.grabfood.revenue || 0);
+        (displayData.parasoes.revenue || 0) +
+        (displayData.online.shopee.revenue || 0) +
+        (displayData.online.gofood.revenue || 0) +
+        (displayData.online.grabfood.revenue || 0);
 
   const totalCosts =
     selectedBrand === "paradose"
@@ -293,11 +293,11 @@ export default function Reports() {
       : selectedBrand === "parasoes"
         ? displayData.parasoes.costs || 0
         : (displayData.paradose.costs || 0) +
-          (displayData.parasoes.costs || 0) +
-          (displayData.expenses?.reduce(
-            (sum, exp) => sum + (exp.amount || 0),
-            0,
-          ) || 0);
+        (displayData.parasoes.costs || 0) +
+        (displayData.expenses?.reduce(
+          (sum, exp) => sum + (exp.amount || 0),
+          0,
+        ) || 0);
 
   const totalProfit = totalRevenue - totalCosts;
 
@@ -686,6 +686,7 @@ export default function Reports() {
           </div>
         </div>
 
+        {/* Print View Document */}
         <div className="hidden print:block mt-8 pt-6 border-t">
           <div className="text-center text-sm text-gray-600">
             <p>

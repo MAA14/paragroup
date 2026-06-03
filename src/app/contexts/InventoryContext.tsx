@@ -36,34 +36,47 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [recipes, setRecipes] = useState<Record<string, Record<string, number>>>({});
   const [loading, setLoading] = useState(true);
 
+  // Fetch initial data from Supabase
   const fetchData = async () => {
-    setLoading(true);
-    
-    const [prodRes, matRes, recRes] = await Promise.all([
-      supabase.from('products').select('*'),
+    const [{ data: mats }, { data: prods }, { data: recs }] = await Promise.all([
       supabase.from('raw_materials').select('*'),
-      supabase.from('recipe_ingredients').select('*')
+      supabase.from('products').select('*'),
+      supabase.from('product_recipes').select('*'),
     ]);
 
-    if (prodRes.data) setProducts(prodRes.data as Product[]);
+    // Build stocks object
+    const stocksObj: Stocks = {};
+    mats?.forEach((mat: any) => {
+      stocksObj[mat.id] = {
+        id: mat.id,
+        name: mat.name,
+        current_stock: mat.current_stock,
+        min_stock: mat.min_stock,
+      };
+    });
+    setStocks(stocksObj);
 
-    if (matRes.data) {
-      const stocksObj: Stocks = {};
-      matRes.data.forEach((mat: any) => {
-        stocksObj[mat.id] = { id: mat.id, name: mat.name, current_stock: mat.current_stock, min_stock: mat.min_stock };
+    // Build recipes map: product_id -> { material_id: quantity_needed }
+    const recObj: Record<string, Record<string, number>> = {};
+    recs?.forEach((row: any) => {
+      if (!recObj[row.product_id]) recObj[row.product_id] = {};
+      recObj[row.product_id][row.material_id] = row.quantity_needed;
+    });
+    setRecipes(recObj);
+
+    // Compute dynamic stock for each product based on recipes
+    const computedProducts = prods?.map((product: any) => {
+      const prodRecipe = recObj[product.id];
+      if (!prodRecipe || Object.keys(prodRecipe).length === 0) {
+        return { ...product, stock: product.stock } as Product;
+      }
+      const matStocks = Object.entries(prodRecipe).map(([matId, needed]) => {
+        const available = stocksObj[matId]?.current_stock || 0;
+        return Math.floor(available / needed);
       });
-      setStocks(stocksObj);
-    }
-
-    if (recRes.data) {
-      const recObj: Record<string, Record<string, number>> = {};
-      recRes.data.forEach((row: any) => {
-        if (!recObj[row.product_id]) recObj[row.product_id] = {};
-        recObj[row.product_id][row.material_id] = row.quantity_needed;
-      });
-      setRecipes(recObj);
-    }
-
+      return { ...product, stock: Math.min(...matStocks) } as Product;
+    }) ?? [];
+    setProducts(computedProducts);
     setLoading(false);
   };
 
@@ -71,85 +84,138 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     fetchData();
   }, []);
 
+  // Update raw material stock and recompute product stocks
   const updateStock = async (id: string, delta: number) => {
     const current = stocks[id]?.current_stock || 0;
     const newStock = Math.max(0, current + delta);
-    
-    // Optimistic update
+    // Optimistic UI update
     setStocks(prev => ({
       ...prev,
-      [id]: { ...prev[id], current_stock: newStock }
+      [id]: { ...prev[id], current_stock: newStock },
     }));
-
-    await supabase.from('raw_materials')
+    await supabase
+      .from('raw_materials')
       .update({ current_stock: newStock, last_updated: new Date().toISOString() })
       .eq('id', id);
+    // Recompute product stocks after raw material change
+    recomputeProducts();
   };
 
+  // Helper to recompute product stocks based on current raw material stocks
+  const recomputeProducts = () => {
+    const computed = products.map(product => {
+      const prodRecipe = recipes[product.id];
+      if (!prodRecipe || Object.keys(prodRecipe).length === 0) {
+        return product;
+      }
+      const matStocks = Object.entries(prodRecipe).map(([matId, needed]) => {
+        const available = stocks[matId]?.current_stock || 0;
+        return Math.floor(available / needed);
+      });
+      return { ...product, stock: Math.min(...matStocks) } as Product;
+    });
+    setProducts(computed);
+  };
+
+  // Checkout handling – validates stock, records transaction, updates raw materials and product stocks
   const checkout = async (items: any[], transactionData: any) => {
+    // Validate stock availability
+    for (const item of items) {
+      const prod = products.find(p => p.id === item.id);
+      if (prod && item.quantity > (prod.stock ?? 0)) {
+        alert(`Produk ${prod.name} tidak cukup stok. Transaksi dibatalkan.`);
+        return;
+      }
+    }
+
+    // Calculate deductions
     const matDeductions: Record<string, number> = {};
     const prodDeductions: Record<string, number> = {};
-
     items.forEach(item => {
       const prodRecipe = recipes[item.id];
       if (prodRecipe) {
         Object.entries(prodRecipe).forEach(([matId, qty]) => {
-          matDeductions[matId] = (matDeductions[matId] || 0) + (qty * item.quantity);
+          matDeductions[matId] = (matDeductions[matId] || 0) + qty * item.quantity;
         });
       } else {
         prodDeductions[item.id] = (prodDeductions[item.id] || 0) + item.quantity;
       }
     });
 
-    await supabase.from('transactions').insert([{
-      id: transactionData.id,
-      customer_name: transactionData.customerName,
-      subtotal: transactionData.subtotal,
-      tax: transactionData.tax,
-      total: transactionData.total,
-      commission: transactionData.commission,
-      net_total: transactionData.netTotal,
-      payment_method: transactionData.paymentMethod,
-      payment_method_label: transactionData.paymentMethodLabel,
-      purchase_method: transactionData.purchaseMethod,
-      purchase_method_label: transactionData.purchaseMethodLabel,
-      online_platform: transactionData.onlinePlatform,
-      offline_type: transactionData.offlineType,
-      created_at: transactionData.date,
-    }]);
+    // Record transaction header
+    await supabase.from('transactions').insert([
+      {
+        id: transactionData.id,
+        customer_name: transactionData.customerName,
+        subtotal: transactionData.subtotal,
+        tax: transactionData.tax,
+        total: transactionData.total,
+        commission: transactionData.commission,
+        net_total: transactionData.netTotal,
+        payment_method: transactionData.paymentMethod,
+        payment_method_label: transactionData.paymentMethodLabel,
+        purchase_method: transactionData.purchaseMethod,
+        purchase_method_label: transactionData.purchaseMethodLabel,
+        online_platform: transactionData.onlinePlatform,
+        offline_type: transactionData.offlineType,
+        created_at: transactionData.date,
+      },
+    ]);
 
+    // Record transaction items
     const txItems = items.map(item => ({
       transaction_id: transactionData.id,
       product_id: item.id,
       name: item.name,
       brand: item.brand,
       price: item.price,
-      quantity: item.quantity
+      quantity: item.quantity,
     }));
     await supabase.from('transaction_items').insert(txItems);
 
+    // Apply raw material deductions
     for (const [matId, deductQty] of Object.entries(matDeductions)) {
       const current = stocks[matId]?.current_stock || 0;
-      await supabase.from('raw_materials').update({ current_stock: Math.max(0, current - deductQty) }).eq('id', matId);
+      const newStock = Math.max(0, current - deductQty);
+      await supabase
+        .from('raw_materials')
+        .update({ current_stock: newStock })
+        .eq('id', matId);
     }
-    
+
+    // Apply product deductions for items without recipes
     for (const [prodId, deductQty] of Object.entries(prodDeductions)) {
       const product = products.find(p => p.id === prodId);
       if (product) {
-        await supabase.from('products').update({ stock: Math.max(0, product.stock - deductQty) }).eq('id', prodId);
+        const newStock = Math.max(0, (product.stock ?? 0) - deductQty);
+        await supabase.from('products').update({ stock: newStock }).eq('id', prodId);
       }
     }
 
-    fetchData();
+    // Recalculate dynamic product stocks after raw material updates
+    for (const product of products) {
+      const prodRecipe = recipes[product.id];
+      if (prodRecipe) {
+        const matStocks = Object.entries(prodRecipe).map(([matId, needed]) => {
+          const available = Math.max(0, (stocks[matId]?.current_stock || 0) - (matDeductions[matId] || 0));
+          return Math.floor(available / needed);
+        });
+        const newStock = Math.min(...matStocks);
+        await supabase.from('products').update({ stock: newStock }).eq('id', product.id);
+      }
+    }
+
+    // Refresh data to reflect latest stocks and product availability
+    await fetchData();
   };
 
   const isProductAvailable = (productId: string): boolean => {
     const prodRecipe = recipes[productId];
     if (!prodRecipe) {
-        const product = products.find(p => p.id === productId);
-        return product ? product.stock > 0 : false;
+      const product = products.find(p => p.id === productId);
+      return product ? (product.stock ?? 0) > 0 : false;
     }
-
+    // Ensure each required material has sufficient stock
     for (const [matId, needed] of Object.entries(prodRecipe)) {
       const available = stocks[matId]?.current_stock || 0;
       if (available < needed) return false;
@@ -158,7 +224,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <InventoryContext.Provider value={{ stocks, products, updateStock, checkout, isProductAvailable, loading }}>
+    <InventoryContext.Provider
+      value={{ stocks, products, updateStock, checkout, isProductAvailable, loading }}
+    >
       {children}
     </InventoryContext.Provider>
   );

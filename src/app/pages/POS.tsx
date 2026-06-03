@@ -31,6 +31,7 @@ export default function POS() {
   const [offlineType, setOfflineType] = useState("dine-in");
 
   const [isPrinting, setIsPrinting] = useState(false);
+  const [selectedBrand, setSelectedBrand] = useState<'Paradose' | 'Parasoes' | 'Semua'>('Semua');
   const { products, isProductAvailable, checkout } = useInventory();
 
   const addToCart = (product: (typeof products)[0]) => {
@@ -336,26 +337,38 @@ export default function POS() {
                   Pilih Produk
                 </h2>
 
-                <div className="mb-4">
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">
-                    Paradose - Coffee
-                  </h3>
+                <div className="mb-6">
+                  <select 
+                    className="w-full p-2 border border-gray-300 rounded-lg mb-4"
+                    value={selectedBrand} 
+                    onChange={(e) => setSelectedBrand(e.target.value as "Paradose" | "Parasoes" | "Semua")}
+                  >
+                    <option value="Semua">Semua Produk</option>
+                    <option value="Paradose">Paradose</option>
+                    <option value="Parasoes">Parasoes</option>
+                  </select>
+
                   <div className="grid grid-cols-2 gap-4">
                     {products
-                      .filter((p) => p.brand === "Paradose")
+                      .filter((p) => selectedBrand === "Semua" || p.brand === selectedBrand)
                       .map((product) => (
                         <button
                           key={product.id}
                           onClick={() => addToCart(product)}
                           disabled={!isProductAvailable(product.id)}
                           className={`border-2 rounded-lg p-4 text-left transition-colors ${
-                            isProductAvailable(product.id)
-                              ? "bg-amber-50 hover:bg-amber-100 border-amber-200"
-                              : "bg-gray-100 border-gray-200 opacity-50 cursor-not-allowed"
-                          }`}
+                              isProductAvailable(product.id)
+                                ? (product.brand === 'Paradose'
+                                    ? "bg-amber-50 hover:bg-amber-100 border-amber-200"
+                                    : "bg-orange-50 hover:bg-orange-100 border-orange-200")
+                                : "bg-gray-100 border-gray-200 opacity-50 cursor-not-allowed"
+                              }`}
                         >
                           <div className="font-medium text-gray-900">
                             {product.name}
+                          </div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            Stok: {product.stock}
                           </div>
                           <div className="text-amber-700 font-semibold mt-1">
                             Rp {product.price.toLocaleString("id-ID")}
@@ -370,39 +383,7 @@ export default function POS() {
                   </div>
                 </div>
 
-                <div>
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">
-                    Parasoes - Choux Pastry
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    {products
-                      .filter((p) => p.brand === "Parasoes")
-                      .map((product) => (
-                        <button
-                          key={product.id}
-                          onClick={() => addToCart(product)}
-                          disabled={!isProductAvailable(product.id)}
-                          className={`border-2 rounded-lg p-4 text-left transition-colors ${
-                            isProductAvailable(product.id)
-                              ? "bg-orange-50 hover:bg-orange-100 border-orange-200"
-                              : "bg-gray-100 border-gray-200 opacity-50 cursor-not-allowed"
-                          }`}
-                        >
-                          <div className="font-medium text-gray-900">
-                            {product.name}
-                          </div>
-                          <div className="text-orange-700 font-semibold mt-1">
-                            Rp {product.price.toLocaleString("id-ID")}
-                          </div>
-                          {!isProductAvailable(product.id) && (
-                            <div className="text-xs text-red-500 mt-1 font-bold">
-                              Stok Habis
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                  </div>
-                </div>
+
               </div>
             </div>
 
@@ -596,8 +577,8 @@ export default function POS() {
       </div>
 
       {/* Hidden Print Receipt */}
-      {lastTransaction && (
-        <div id="printable-receipt" className="hidden print:block">
+      {lastTransaction && ( <div id="printable-receipt" className="print:block">
+          <style>{`@media print { body * { visibility:hidden; } #printable-receipt, #printable-receipt * { visibility:visible; } #printable-receipt { position:absolute; left:0; top:0; }`}</style>
           <div
             style={{
               maxWidth: "800px",
