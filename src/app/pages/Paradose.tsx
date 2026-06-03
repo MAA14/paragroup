@@ -1,88 +1,89 @@
 import { useState, useEffect } from "react";
 import Header from "../components/Header";
 import svgPaths from "../../imports/MainContent/svg-n0e2pi4v59";
-import { AlertCircle, Plus, X, Save } from "lucide-react";
+import { AlertCircle, Plus, X, Save, Trash2, Edit } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
 
-interface CustomMaterial {
+interface RawMaterial {
   id: string;
   name: string;
+  brand: string;
   unit: string;
-  current: number;
-  min: number;
-  lastUpdated: string;
+  current_stock: number;
+  min_stock: number;
+  last_updated: string;
+}
+
+interface Product {
+  id: string;
+  name: string;
+  brand: string;
+  category: string;
+  price: number;
+  stock: number;
+  min_stock: number;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export default function Paradose() {
-  const [stocks, setStocks] = useState({
-    goldenBrew: { current: 12, min: 10 },
-    berrycano: { current: 7, min: 10 },
-    bijiKopiBlend: { current: 9, min: 8 },
-    susuDiamond: { current: 26, min: 24 },
-    gulaAren: { current: 2, min: 1 },
-    cranberryDiamond: { current: 7, min: 6 },
-    botol: { current: 100, min: 75 },
-  });
-
-  const [customMaterials, setCustomMaterials] = useState<CustomMaterial[]>([]);
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [isAddMaterialModalOpen, setIsAddMaterialModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingItemType, setEditingItemType] = useState<
+    "product" | "material"
+  >("material");
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+  const [deletingItemName, setDeletingItemName] = useState<string>("");
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [newMaterial, setNewMaterial] = useState({
     name: "",
     unit: "",
-    current: 0,
-    min: 0,
+    current_stock: 0,
+    min_stock: 0,
+  });
+  const [editForm, setEditForm] = useState({
+    name: "",
+    unit: "",
+    current_stock: 0,
+    min_stock: 0,
   });
 
-  // Load stocks from database on mount
+  // Track local changes for batch saving
+  const [changedMaterialIds, setChangedMaterialIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [changedProductIds, setChangedProductIds] = useState<Set<string>>(
+    new Set(),
+  );
+
   useEffect(() => {
     loadStocks();
   }, []);
 
   const loadStocks = async () => {
     try {
-      const { data, error } = await supabase
-        .from("paradose_stocks")
-        .select("*");
-      if (error) throw error;
-      if (data && data.length > 0) {
-        const dbStocks = data[0];
-        setStocks({
-          goldenBrew: {
-            current: dbStocks.golden_brew_current || 12,
-            min: dbStocks.golden_brew_min || 10,
-          },
-          berrycano: {
-            current: dbStocks.berrycano_current || 7,
-            min: dbStocks.berrycano_min || 10,
-          },
-          bijiKopiBlend: {
-            current: dbStocks.biji_kopi_blend_current || 9,
-            min: dbStocks.biji_kopi_blend_min || 8,
-          },
-          susuDiamond: {
-            current: dbStocks.susu_diamond_current || 26,
-            min: dbStocks.susu_diamond_min || 24,
-          },
-          gulaAren: {
-            current: dbStocks.gula_aren_current || 2,
-            min: dbStocks.gula_aren_min || 1,
-          },
-          cranberryDiamond: {
-            current: dbStocks.cranberry_diamond_current || 7,
-            min: dbStocks.cranberry_diamond_min || 6,
-          },
-          botol: {
-            current: dbStocks.botol_current || 100,
-            min: dbStocks.botol_min || 75,
-          },
-        });
-        if (dbStocks.custom_materials) {
-          setCustomMaterials(dbStocks.custom_materials);
-        }
-      }
+      // Load raw materials for Paradose brand
+      const { data: materialsData, error: materialsError } = await supabase
+        .from("raw_materials")
+        .select("*")
+        .eq("brand", "Paradose");
+      if (materialsError) throw materialsError;
+      if (materialsData) setRawMaterials(materialsData);
+
+      // Load products for Paradose brand
+      const { data: productsData, error: productsError } = await supabase
+        .from("products")
+        .select("*")
+        .eq("brand", "Paradose");
+      if (productsError) throw productsError;
+      if (productsData) setProducts(productsData);
     } catch (error) {
       console.error("Error loading stocks:", error);
     }
@@ -91,28 +92,42 @@ export default function Paradose() {
   const saveChanges = async () => {
     setIsSaving(true);
     try {
-      const { error } = await supabase.from("paradose_stocks").upsert({
-        id: 1,
-        golden_brew_current: stocks.goldenBrew.current,
-        golden_brew_min: stocks.goldenBrew.min,
-        berrycano_current: stocks.berrycano.current,
-        berrycano_min: stocks.berrycano.min,
-        biji_kopi_blend_current: stocks.bijiKopiBlend.current,
-        biji_kopi_blend_min: stocks.bijiKopiBlend.min,
-        susu_diamond_current: stocks.susuDiamond.current,
-        susu_diamond_min: stocks.susuDiamond.min,
-        gula_aren_current: stocks.gulaAren.current,
-        gula_aren_min: stocks.gulaAren.min,
-        cranberry_diamond_current: stocks.cranberryDiamond.current,
-        cranberry_diamond_min: stocks.cranberryDiamond.min,
-        botol_current: stocks.botol.current,
-        botol_min: stocks.botol.min,
-        custom_materials: customMaterials,
-        updated_at: new Date().toISOString(),
-      });
-      if (error) throw error;
+      // Save changed raw materials
+      for (const material of rawMaterials) {
+        if (changedMaterialIds.has(material.id)) {
+          const { error } = await supabase
+            .from("raw_materials")
+            .update({
+              name: material.name,
+              unit: material.unit,
+              current_stock: material.current_stock,
+              min_stock: material.min_stock,
+              last_updated: new Date().toISOString(),
+            })
+            .eq("id", material.id);
+          if (error) throw error;
+        }
+      }
+
+      // Save changed products
+      for (const product of products) {
+        if (changedProductIds.has(product.id)) {
+          const { error } = await supabase
+            .from("products")
+            .update({
+              stock: product.stock,
+              min_stock: product.min_stock,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", product.id);
+          if (error) throw error;
+        }
+      }
+
       toast.success("Perubahan berhasil disimpan!");
       setHasChanges(false);
+      setChangedMaterialIds(new Set());
+      setChangedProductIds(new Set());
     } catch (error) {
       toast.error("Gagal menyimpan perubahan");
       console.error("Error saving stocks:", error);
@@ -121,51 +136,159 @@ export default function Paradose() {
     }
   };
 
-  const updateStock = (key: keyof typeof stocks, delta: number) => {
-    setStocks((prev) => ({
-      ...prev,
-      [key]: {
-        ...prev[key],
-        current: Math.max(0, prev[key].current + delta),
-      },
-    }));
-    setHasChanges(true);
-  };
-
-  const updateCustomMaterialStock = (id: string, delta: number) => {
-    setCustomMaterials((prev) =>
-      prev.map((material) =>
-        material.id === id
-          ? {
-              ...material,
-              current: Math.max(0, material.current + delta),
-              lastUpdated: new Date().toISOString().split("T")[0],
-            }
-          : material,
+  const updateProductStock = (id: string, delta: number) => {
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === id ? { ...p, stock: Math.max(0, p.stock + delta) } : p,
       ),
     );
+    setChangedProductIds((prev) => new Set(prev).add(id));
     setHasChanges(true);
   };
 
-  const handleAddMaterial = () => {
+  const updateMaterialStock = (id: string, delta: number) => {
+    setRawMaterials((prev) =>
+      prev.map((m) =>
+        m.id === id
+          ? {
+            ...m,
+            current_stock: Math.max(0, m.current_stock + delta),
+            last_updated: new Date().toISOString().split("T")[0],
+          }
+          : m,
+      ),
+    );
+    setChangedMaterialIds((prev) => new Set(prev).add(id));
+    setHasChanges(true);
+  };
+
+  const handleAddMaterial = async () => {
     if (!newMaterial.name || !newMaterial.unit) {
       toast.error("Mohon isi nama bahan dan satuan!");
       return;
     }
 
-    const material: CustomMaterial = {
-      id: Date.now().toString(),
-      name: newMaterial.name,
-      unit: newMaterial.unit,
-      current: newMaterial.current,
-      min: newMaterial.min,
-      lastUpdated: new Date().toISOString().split("T")[0],
-    };
+    const id =
+      newMaterial.name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
 
-    setCustomMaterials((prev) => [...prev, material]);
-    toast.success("Bahan baru berhasil ditambahkan!");
-    setIsAddMaterialModalOpen(false);
-    setNewMaterial({ name: "", unit: "", current: 0, min: 0 });
+    try {
+      const { data, error } = await supabase
+        .from("raw_materials")
+        .insert({
+          id,
+          name: newMaterial.name,
+          brand: "Paradose",
+          unit: newMaterial.unit,
+          current_stock: newMaterial.current_stock,
+          min_stock: newMaterial.min_stock,
+          last_updated: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setRawMaterials((prev) => [...prev, data]);
+      toast.success("Bahan baru berhasil ditambahkan!");
+      setIsAddMaterialModalOpen(false);
+      setNewMaterial({ name: "", unit: "", current_stock: 0, min_stock: 0 });
+    } catch (error) {
+      toast.error("Gagal menambahkan bahan baru");
+      console.error("Error adding material:", error);
+    }
+  };
+
+  const handleEditProduct = (product: Product) => {
+    setEditingItemId(product.id);
+    setEditingItemType("product");
+    setEditForm({
+      name: product.name,
+      unit: getProductUnit(product.category),
+      current_stock: product.stock,
+      min_stock: product.min_stock,
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditMaterial = (material: RawMaterial) => {
+    setEditingItemId(material.id);
+    setEditingItemType("material");
+    setEditForm({
+      name: material.name,
+      unit: material.unit,
+      current_stock: material.current_stock,
+      min_stock: material.min_stock,
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingItemId) return;
+
+    if (editingItemType === "product") {
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === editingItemId
+            ? {
+              ...p,
+              stock: editForm.current_stock,
+              min_stock: editForm.min_stock,
+            }
+            : p,
+        ),
+      );
+      setChangedProductIds((prev) => new Set(prev).add(editingItemId));
+    } else {
+      if (!editForm.name || !editForm.unit) {
+        toast.error("Mohon isi nama bahan dan satuan!");
+        return;
+      }
+      setRawMaterials((prev) =>
+        prev.map((m) =>
+          m.id === editingItemId
+            ? {
+              ...m,
+              name: editForm.name,
+              unit: editForm.unit,
+              current_stock: editForm.current_stock,
+              min_stock: editForm.min_stock,
+              last_updated: new Date().toISOString().split("T")[0],
+            }
+            : m,
+        ),
+      );
+      setChangedMaterialIds((prev) => new Set(prev).add(editingItemId));
+    }
+
+    setHasChanges(true);
+    toast.success("Stok berhasil diupdate!");
+    setIsEditModalOpen(false);
+    setEditingItemId(null);
+  };
+
+  const confirmDeleteMaterial = (id: string, name: string) => {
+    setDeletingItemId(id);
+    setDeletingItemName(name);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteMaterial = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("raw_materials")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+
+      setRawMaterials((prev) => prev.filter((m) => m.id !== id));
+      toast.success("Bahan berhasil dihapus!");
+      setIsDeleteModalOpen(false);
+      setDeletingItemId(null);
+      setDeletingItemName("");
+    } catch (error) {
+      toast.error("Gagal menghapus bahan");
+      console.error("Error deleting material:", error);
+    }
   };
 
   const getProgressColor = (current: number, min: number) => {
@@ -178,14 +301,28 @@ export default function Paradose() {
     return Math.min((current / total) * 100, 100);
   };
 
-  const totalProducts = stocks.goldenBrew.current + stocks.berrycano.current;
-  const totalRawMaterials =
-    stocks.bijiKopiBlend.current +
-    stocks.susuDiamond.current +
-    stocks.gulaAren.current +
-    stocks.cranberryDiamond.current +
-    stocks.botol.current +
-    customMaterials.reduce((sum, mat) => sum + mat.current, 0);
+  const getProductUnit = (category: string) => {
+    switch (category) {
+      case "coffee":
+        return "cups";
+      default:
+        return "pcs";
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    try {
+      return new Date(dateStr).toISOString().split("T")[0];
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const totalProducts = products.reduce((sum, p) => sum + p.stock, 0);
+  const totalRawMaterials = rawMaterials.reduce(
+    (sum, m) => sum + m.current_stock,
+    0,
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -315,144 +452,98 @@ export default function Paradose() {
             Stok Produk
           </h2>
           <div className="grid grid-cols-2 gap-6">
-            {/* Golden Brew */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Golden Brew
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-27
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  {stocks.goldenBrew.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    cups
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 10 cups
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
+            {products.map((product) => {
+              const unit = getProductUnit(product.category);
+              return (
                 <div
-                  className="h-[8px] rounded-full"
-                  style={{
-                    width: `${getProgressPercentage(stocks.goldenBrew.current, stocks.goldenBrew.min)}%`,
-                    backgroundColor: getProgressColor(
-                      stocks.goldenBrew.current,
-                      stocks.goldenBrew.min,
-                    ),
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("goldenBrew", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px] text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
+                  key={product.id}
+                  className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5 relative"
                 >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("goldenBrew", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
-
-            {/* Berrycano */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3
-                    className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                    style={{ fontFamily: "Inter, sans-serif" }}
-                  >
-                    Berrycano
-                  </h3>
-                  <p
-                    className="text-[14px] leading-[20px] text-[#6a7282]"
-                    style={{ fontFamily: "Inter, sans-serif" }}
-                  >
-                    Updated: 2026-04-26
-                  </p>
-                </div>
-                {stocks.berrycano.current <= stocks.berrycano.min && (
-                  <div className="bg-[#fef2f2] rounded-[4px] px-2 py-1 flex items-center gap-1">
-                    <AlertCircle className="w-4 h-4 text-[#e7000b]" />
-                    <span
-                      className="text-[12px] font-medium leading-[16px] text-[#e7000b]"
+                  {/* Edit Button */}
+                  <div className="absolute top-4 right-4 flex gap-2">
+                    <button
+                      onClick={() => handleEditProduct(product)}
+                      className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-[8px] transition"
+                      title="Edit produk"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3
+                        className="text-[18px] font-medium leading-[27px] text-[#101828]"
+                        style={{ fontFamily: "Inter, sans-serif" }}
+                      >
+                        {product.name}
+                      </h3>
+                      <p
+                        className="text-[14px] leading-[20px] text-[#6a7282]"
+                        style={{ fontFamily: "Inter, sans-serif" }}
+                      >
+                        Updated: {formatDate(product.updated_at)}
+                      </p>
+                    </div>
+                    {product.stock <= product.min_stock && (
+                      <div className="bg-[#fef2f2] rounded-[4px] px-2 py-1 flex items-center gap-1">
+                        <AlertCircle className="w-4 h-4 text-[#e7000b]" />
+                        <span
+                          className="text-[12px] font-medium leading-[16px] text-[#e7000b]"
+                          style={{ fontFamily: "Inter, sans-serif" }}
+                        >
+                          Hampir Habis
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mb-3">
+                    <p
+                      className="text-[30px] font-semibold leading-[36px] text-[#101828]"
                       style={{ fontFamily: "Inter, sans-serif" }}
                     >
-                      Hampir Habis
-                    </span>
+                      {product.stock}{" "}
+                      <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
+                        {unit}
+                      </span>
+                    </p>
+                    <p
+                      className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      Min: {product.min_stock} {unit}
+                    </p>
                   </div>
-                )}
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  {stocks.berrycano.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    cups
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 10 cups
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
-                <div
-                  className="h-[8px] rounded-full"
-                  style={{
-                    width: `${getProgressPercentage(stocks.berrycano.current, stocks.berrycano.min)}%`,
-                    backgroundColor: getProgressColor(
-                      stocks.berrycano.current,
-                      stocks.berrycano.min,
-                    ),
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("berrycano", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px] text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("berrycano", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
+                  <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
+                    <div
+                      className="h-[8px] rounded-full"
+                      style={{
+                        width: `${getProgressPercentage(product.stock, product.min_stock)}%`,
+                        backgroundColor: getProgressColor(
+                          product.stock,
+                          product.min_stock,
+                        ),
+                      }}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => updateProductStock(product.id, -1)}
+                      className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px] text-[#0a0a0a]"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      - Use
+                    </button>
+                    <button
+                      onClick={() => updateProductStock(product.id, 1)}
+                      className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px]"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      + Restock
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -466,20 +557,19 @@ export default function Paradose() {
               Stok Bahan
             </h2>
             <div className="flex gap-3">
-              {hasChanges && (
-                <button
-                  onClick={saveChanges}
-                  disabled={isSaving}
-                  className="bg-[#22c55e] hover:bg-green-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-[10px] flex items-center gap-2 text-[14px] font-medium"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  <Save className="w-4 h-4" />
-                  {isSaving ? "Menyimpan..." : "Simpan Perubahan"}
-                </button>
-              )}
+              <button
+                onClick={saveChanges}
+                disabled={isSaving || !hasChanges}
+                className="bg-[#22c55e] hover:bg-green-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-[10px] flex items-center gap-2 text-[14px] font-medium"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                <Save className="w-4 h-4" />
+                {isSaving ? "Menyimpan..." : "Simpan Perubahan"}
+              </button>
+
               <button
                 onClick={() => setIsAddMaterialModalOpen(true)}
-                className="bg-[#101828] hover:bg-gray-900 text-white px-4 py-2 rounded-[10px] flex items-center gap-2 text-[14px] font-medium"
+                className="bg-[#e17100] hover:bg-[#f54900] text-white px-4 py-2 rounded-[10px] flex items-center gap-2 text-[14px] font-medium"
                 style={{ fontFamily: "Inter, sans-serif" }}
               >
                 <Plus className="w-4 h-4" />
@@ -488,308 +578,30 @@ export default function Paradose() {
             </div>
           </div>
           <div className="grid grid-cols-3 gap-6">
-            {/* Biji Kopi Blend */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Biji Kopi Blend
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-27
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  0{stocks.bijiKopiBlend.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    kg
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 8 kg
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
-                <div
-                  className="h-[8px] rounded-full bg-[#00c950]"
-                  style={{
-                    width: `${getProgressPercentage(stocks.bijiKopiBlend.current, stocks.bijiKopiBlend.min)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("bijiKopiBlend", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("bijiKopiBlend", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
-
-            {/* Susu Diamond */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Susu Diamond
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-27
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  {stocks.susuDiamond.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    liter
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 24 liter
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
-                <div
-                  className="h-[8px] rounded-full bg-[#00c950]"
-                  style={{
-                    width: `${getProgressPercentage(stocks.susuDiamond.current, stocks.susuDiamond.min)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("susuDiamond", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("susuDiamond", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
-
-            {/* Gula Aren */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Gula Aren
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-26
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  0{stocks.gulaAren.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    liter
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 1 liter
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
-                <div
-                  className="h-[8px] rounded-full bg-[#00c950]"
-                  style={{
-                    width: `${getProgressPercentage(stocks.gulaAren.current, stocks.gulaAren.min)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("gulaAren", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("gulaAren", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
-
-            {/* Cranberry Diamond */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Cranberry Diamond
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-27
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  0{stocks.cranberryDiamond.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    Karton
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 6 Karton
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
-                <div
-                  className="h-[8px] rounded-full bg-[#00c950]"
-                  style={{
-                    width: `${getProgressPercentage(stocks.cranberryDiamond.current, stocks.cranberryDiamond.min)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("cranberryDiamond", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("cranberryDiamond", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
-
-            {/* Botol */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Botol
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-27
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  {stocks.botol.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    pcs
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 75 pcs
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
-                <div
-                  className="h-[8px] rounded-full bg-[#00c950]"
-                  style={{
-                    width: `${getProgressPercentage(stocks.botol.current, stocks.botol.min)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("botol", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("botol", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
-
-            {/* Custom Materials */}
-            {customMaterials.map((material) => (
+            {rawMaterials.map((material) => (
               <div
                 key={material.id}
-                className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5"
+                className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5 relative"
               >
-                <div className="mb-3">
+                {/* Edit and Delete Buttons */}
+                <div className="absolute top-4 right-4 flex gap-2">
+                  <button
+                    onClick={() => handleEditMaterial(material)}
+                    className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-[8px] transition"
+                    title="Edit bahan"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => confirmDeleteMaterial(material.id, material.name)}
+                    className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-[8px] transition"
+                    title="Hapus bahan"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="mb-3 pr-24">
                   <h3
                     className="text-[18px] font-medium leading-[27px] text-[#101828]"
                     style={{ fontFamily: "Inter, sans-serif" }}
@@ -800,7 +612,7 @@ export default function Paradose() {
                     className="text-[14px] leading-[20px] text-[#6a7282]"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
-                    Updated: {material.lastUpdated}
+                    Updated: {formatDate(material.last_updated)}
                   </p>
                 </div>
                 <div className="mb-3">
@@ -808,7 +620,7 @@ export default function Paradose() {
                     className="text-[30px] font-semibold leading-[36px] text-[#101828]"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
-                    {material.current}{" "}
+                    {material.current_stock}{" "}
                     <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
                       {material.unit}
                     </span>
@@ -817,27 +629,31 @@ export default function Paradose() {
                     className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
-                    Min: {material.min} {material.unit}
+                    Min: {material.min_stock} {material.unit}
                   </p>
                 </div>
                 <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
                   <div
-                    className="h-[8px] rounded-full bg-[#00c950]"
+                    className="h-[8px] rounded-full"
                     style={{
-                      width: `${getProgressPercentage(material.current, material.min)}%`,
+                      width: `${getProgressPercentage(material.current_stock, material.min_stock)}%`,
+                      backgroundColor: getProgressColor(
+                        material.current_stock,
+                        material.min_stock,
+                      ),
                     }}
                   />
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => updateCustomMaterialStock(material.id, -1)}
+                    onClick={() => updateMaterialStock(material.id, -1)}
                     className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
                     - Use
                   </button>
                   <button
-                    onClick={() => updateCustomMaterialStock(material.id, 1)}
+                    onClick={() => updateMaterialStock(material.id, 1)}
                     className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
@@ -850,9 +666,157 @@ export default function Paradose() {
         </div>
       </main>
 
+      {/* Edit Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-[rgba(0,0,0,0.5)] bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-[10px] max-w-md w-full">
+            <div className="flex items-center justify-between p-6 border-b border-[#e5e7eb]">
+              <h2
+                className="text-[20px] font-semibold text-[#101828]"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                {editingItemType === "product" ? "Edit Produk" : "Edit Bahan"}
+              </h2>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label
+                  className="block text-[14px] font-medium text-[#364153] mb-2"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                >
+                  Nama {editingItemType === "product" ? "Produk" : "Bahan"}
+                </label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, name: e.target.value })
+                  }
+                  placeholder="Contoh: Sirup Vanilla"
+                  className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                  disabled={editingItemType === "product"}
+                />
+              </div>
+
+              {editingItemType === "material" && (
+                <div>
+                  <label
+                    className="block text-[14px] font-medium text-[#364153] mb-2"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    Satuan
+                  </label>
+                  <select
+                    value={editForm.unit}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        unit: e.target.value,
+                      })
+                    }
+                    className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    <option value="">Pilih satuan...</option>
+                    <option value="kg">kg</option>
+                    <option value="liter">liter</option>
+                    <option value="botol">botol</option>
+                    <option value="bungkus">bungkus</option>
+                    <option value="pcs">pcs</option>
+                    <option value="gram">gram</option>
+                    <option value="ml">ml</option>
+                    <option value="Karton">Karton</option>
+                    <option value="bottles">bottles</option>
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label
+                  className="block text-[14px] font-medium text-[#364153] mb-2"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                >
+                  Stok Saat Ini
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={
+                    editForm.current_stock === 0 ? "" : editForm.current_stock
+                  }
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      current_stock:
+                        e.target.value === ""
+                          ? 0
+                          : parseInt(e.target.value) || 0,
+                    })
+                  }
+                  placeholder="0"
+                  className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                />
+              </div>
+
+              <div>
+                <label
+                  className="block text-[14px] font-medium text-[#364153] mb-2"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                >
+                  Stok Minimum
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editForm.min_stock === 0 ? "" : editForm.min_stock}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      min_stock:
+                        e.target.value === ""
+                          ? 0
+                          : parseInt(e.target.value) || 0,
+                    })
+                  }
+                  placeholder="0"
+                  className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-6 border-t border-[#e5e7eb]">
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="flex-1 px-4 py-2 border border-[#d1d5dc] text-[#101828] rounded-[10px] font-medium hover:bg-gray-50"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 px-4 py-2 bg-[#101828] text-white rounded-[10px] font-medium hover:bg-gray-900"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                Simpan Perubahan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Material Modal */}
       {isAddMaterialModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-[rgba(0,0,0,0.5)] bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-[10px] max-w-md w-full">
             <div className="flex items-center justify-between p-6 border-b border-[#e5e7eb]">
               <h2
@@ -896,16 +860,25 @@ export default function Paradose() {
                 >
                   Satuan
                 </label>
-                <input
-                  type="text"
+                <select
                   value={newMaterial.unit}
                   onChange={(e) =>
                     setNewMaterial({ ...newMaterial, unit: e.target.value })
                   }
-                  placeholder="Contoh: botol, kg, liter"
                   className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
                   style={{ fontFamily: "Inter, sans-serif" }}
-                />
+                >
+                  <option value="">Pilih satuan...</option>
+                  <option value="kg">kg</option>
+                  <option value="liter">liter</option>
+                  <option value="botol">botol</option>
+                  <option value="bungkus">bungkus</option>
+                  <option value="pcs">pcs</option>
+                  <option value="gram">gram</option>
+                  <option value="ml">ml</option>
+                  <option value="Karton">Karton</option>
+                  <option value="bottles">bottles</option>
+                </select>
               </div>
 
               <div>
@@ -918,13 +891,21 @@ export default function Paradose() {
                 <input
                   type="number"
                   min="0"
-                  value={newMaterial.current}
+                  value={
+                    newMaterial.current_stock === 0
+                      ? ""
+                      : newMaterial.current_stock
+                  }
                   onChange={(e) =>
                     setNewMaterial({
                       ...newMaterial,
-                      current: parseInt(e.target.value) || 0,
+                      current_stock:
+                        e.target.value === ""
+                          ? 0
+                          : parseInt(e.target.value) || 0,
                     })
                   }
+                  placeholder="0"
                   className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 />
@@ -940,13 +921,19 @@ export default function Paradose() {
                 <input
                   type="number"
                   min="0"
-                  value={newMaterial.min}
+                  value={
+                    newMaterial.min_stock === 0 ? "" : newMaterial.min_stock
+                  }
                   onChange={(e) =>
                     setNewMaterial({
                       ...newMaterial,
-                      min: parseInt(e.target.value) || 0,
+                      min_stock:
+                        e.target.value === ""
+                          ? 0
+                          : parseInt(e.target.value) || 0,
                     })
                   }
+                  placeholder="0"
                   className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 />
@@ -968,6 +955,46 @@ export default function Paradose() {
                   Tambah Bahan
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-[rgba(0,0,0,0.5)] bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-[10px] max-w-md w-full p-6">
+            <h2
+              className="text-[20px] font-semibold text-[#101828] mb-4"
+              style={{ fontFamily: "Inter, sans-serif" }}
+            >
+              Konfirmasi Hapus
+            </h2>
+            <p
+              className="text-[16px] text-gray-600 mb-6"
+              style={{ fontFamily: "Inter, sans-serif" }}
+            >
+              Are you sure want delete {deletingItemName}?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeletingItemId(null);
+                  setDeletingItemName("");
+                }}
+                className="flex-1 px-4 py-2 border border-[#d1d5dc] text-gray-700 rounded-[10px] hover:bg-gray-50 font-medium"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => deletingItemId && handleDeleteMaterial(deletingItemId)}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-[10px] font-medium"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                Hapus
+              </button>
             </div>
           </div>
         </div>

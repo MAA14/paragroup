@@ -293,14 +293,17 @@ export default function POS() {
               position: absolute;
               left: 0;
               top: 0;
-              width: 58mm;
-              font-family: 'Courier New', monospace;
-              font-size: 12px;
-              line-height: 1.3;
+              width: 100%;
+              max-width: 800px;
+              height: auto;
             }
             @page {
-              size: 58mm auto;
-              margin: 5mm;
+              size: A4;
+              margin: 0;
+            }
+            body {
+              margin: 0;
+              padding: 0;
             }
           }
           #printable-receipt {
@@ -594,48 +597,431 @@ export default function POS() {
 
       {/* Hidden Print Receipt */}
       {lastTransaction && (
-        <div id="printable-receipt">
-          <pre
+        <div id="printable-receipt" className="hidden print:block">
+          <div
             style={{
-              margin: 0,
-              whiteSpace: "pre-wrap",
-              wordWrap: "break-word",
+              maxWidth: "800px",
+              margin: "0 auto",
+              padding: "40px 20px",
+              fontFamily: "Arial, sans-serif",
+              backgroundColor: "#fff",
+              color: "#333",
             }}
           >
-            {`========================================
-       PARADOSE & PARASOES UMKM
-========================================
-Tanggal: ${new Date(lastTransaction.date).toLocaleString("id-ID")}
-Order ID: ${lastTransaction.id}
-Kasir: Admin
-${lastTransaction.customerName !== "Walk-in Customer" ? `Pelanggan: ${lastTransaction.customerName}` : ""}
+            {/* Header */}
+            <div
+              style={{
+                textAlign: "center",
+                marginBottom: "30px",
+                borderBottom: "2px solid #1f2937",
+                paddingBottom: "20px",
+              }}
+            >
+              <h1
+                style={{
+                  fontSize: "28px",
+                  fontWeight: "bold",
+                  margin: "0 0 5px 0",
+                  color: "#1f2937",
+                }}
+              >
+                PARADOSE & PARASOES UMKM
+              </h1>
+              <p
+                style={{ margin: "5px 0", fontSize: "12px", color: "#6b7280" }}
+              >
+                Kopi Spesial & Pastry Choux Premium
+              </p>
+              <p
+                style={{ margin: "5px 0", fontSize: "11px", color: "#9ca3af" }}
+              >
+                Jl. Kopi No. 123, Jakarta | Phone: 08XX-XXXX-XXXX
+              </p>
+            </div>
 
-----------------------------------------
-DETAIL PESANAN
-----------------------------------------
-${lastTransaction.items
-  .map(
-    (item: CartItem) =>
-      `${item.name}\n  ${item.quantity} x Rp ${item.price.toLocaleString("id-ID")} = Rp ${(item.price * item.quantity).toLocaleString("id-ID")}`,
-  )
-  .join("\n")}
+            {/* Invoice Title & Number */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginBottom: "25px",
+                alignItems: "flex-start",
+              }}
+            >
+              <div>
+                <h2
+                  style={{
+                    fontSize: "16px",
+                    fontWeight: "bold",
+                    margin: "0",
+                    color: "#1f2937",
+                  }}
+                >
+                  INVOICE / STRUK PENJUALAN
+                </h2>
+              </div>
+              <div style={{ textAlign: "right", fontSize: "12px" }}>
+                <p style={{ margin: "3px 0", fontWeight: "bold" }}>
+                  Invoice No: {lastTransaction.id}
+                </p>
+                <p style={{ margin: "3px 0" }}>
+                  Tanggal:{" "}
+                  {new Date(lastTransaction.date).toLocaleDateString("id-ID", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                  })}
+                </p>
+                <p style={{ margin: "3px 0" }}>
+                  Waktu:{" "}
+                  {new Date(lastTransaction.date).toLocaleTimeString("id-ID", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </p>
+              </div>
+            </div>
 
-----------------------------------------
-Subtotal:          Rp ${lastTransaction.subtotal.toLocaleString("id-ID")}
-PPN (10%):         Rp ${lastTransaction.tax.toLocaleString("id-ID")}
-${lastTransaction.commission > 0 ? `Komisi Platform:   -Rp ${lastTransaction.commission.toLocaleString("id-ID")}` : ""}
-----------------------------------------
-TOTAL:             Rp ${lastTransaction.total.toLocaleString("id-ID")}
-${lastTransaction.commission > 0 ? `Net (setelah komisi): Rp ${lastTransaction.netTotal.toLocaleString("id-ID")}` : ""}
+            {/* Customer Info */}
+            <div
+              style={{
+                marginBottom: "25px",
+                padding: "12px",
+                backgroundColor: "#f9fafb",
+                border: "1px solid #e5e7eb",
+                borderRadius: "4px",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "20px",
+                  fontSize: "12px",
+                }}
+              >
+                <div>
+                  <p
+                    style={{
+                      margin: "0 0 5px 0",
+                      fontWeight: "bold",
+                      color: "#374151",
+                    }}
+                  >
+                    Pelanggan:
+                  </p>
+                  <p style={{ margin: "0", color: "#6b7280" }}>
+                    {lastTransaction.customerName !== "Walk-in Customer"
+                      ? lastTransaction.customerName
+                      : "Walk-in Customer"}
+                  </p>
+                </div>
+                <div>
+                  <p
+                    style={{
+                      margin: "0 0 5px 0",
+                      fontWeight: "bold",
+                      color: "#374151",
+                    }}
+                  >
+                    Metode Pembelian:
+                  </p>
+                  <p style={{ margin: "0", color: "#6b7280" }}>
+                    {lastTransaction.purchaseMethodLabel}
+                  </p>
+                </div>
+              </div>
+            </div>
 
-Metode Pembelian: ${lastTransaction.purchaseMethodLabel}
-Metode Pembayaran: ${lastTransaction.paymentMethodLabel}
+            {/* Items Table */}
+            <div style={{ marginBottom: "25px" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: "12px",
+                }}
+              >
+                <thead>
+                  <tr style={{ backgroundColor: "#1f2937", color: "#fff" }}>
+                    <th
+                      style={{
+                        padding: "10px",
+                        textAlign: "left",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      Produk
+                    </th>
+                    <th
+                      style={{
+                        padding: "10px",
+                        textAlign: "center",
+                        fontWeight: "bold",
+                        width: "70px",
+                      }}
+                    >
+                      Qty
+                    </th>
+                    <th
+                      style={{
+                        padding: "10px",
+                        textAlign: "right",
+                        fontWeight: "bold",
+                        width: "100px",
+                      }}
+                    >
+                      Harga
+                    </th>
+                    <th
+                      style={{
+                        padding: "10px",
+                        textAlign: "right",
+                        fontWeight: "bold",
+                        width: "120px",
+                      }}
+                    >
+                      Total
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lastTransaction.items.map(
+                    (item: CartItem, index: number) => (
+                      <tr
+                        key={index}
+                        style={{ borderBottom: "1px solid #e5e7eb" }}
+                      >
+                        <td style={{ padding: "10px", textAlign: "left" }}>
+                          <div style={{ fontWeight: "500", color: "#1f2937" }}>
+                            {item.name}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              color: "#9ca3af",
+                              marginTop: "2px",
+                            }}
+                          >
+                            {item.brand}
+                          </div>
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px",
+                            textAlign: "center",
+                            color: "#374151",
+                          }}
+                        >
+                          {item.quantity}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px",
+                            textAlign: "right",
+                            color: "#374151",
+                          }}
+                        >
+                          Rp {item.price.toLocaleString("id-ID")}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px",
+                            textAlign: "right",
+                            fontWeight: "500",
+                            color: "#1f2937",
+                          }}
+                        >
+                          Rp{" "}
+                          {(item.price * item.quantity).toLocaleString("id-ID")}
+                        </td>
+                      </tr>
+                    ),
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-========================================
-    Terima kasih atas kunjungan Anda!
-       Sampai jumpa kembali :)
-========================================`}
-          </pre>
+            {/* Divider */}
+            <div
+              style={{
+                borderTop: "2px solid #1f2937",
+                borderBottom: "1px solid #e5e7eb",
+                margin: "20px 0",
+              }}
+            ></div>
+
+            {/* Summary */}
+            <div
+              style={{
+                marginBottom: "25px",
+                fontSize: "12px",
+                display: "flex",
+                justifyContent: "flex-end",
+              }}
+            >
+              <div style={{ width: "300px" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginBottom: "8px",
+                  }}
+                >
+                  <span>Subtotal:</span>
+                  <span>
+                    Rp {lastTransaction.subtotal.toLocaleString("id-ID")}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginBottom: "8px",
+                  }}
+                >
+                  <span>PPN (10%):</span>
+                  <span>Rp {lastTransaction.tax.toLocaleString("id-ID")}</span>
+                </div>
+                {lastTransaction.commission > 0 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginBottom: "8px",
+                      color: "#dc2626",
+                    }}
+                  >
+                    <span>Komisi Platform:</span>
+                    <span>
+                      -Rp {lastTransaction.commission.toLocaleString("id-ID")}
+                    </span>
+                  </div>
+                )}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginTop: "12px",
+                    paddingTop: "12px",
+                    borderTop: "2px solid #e5e7eb",
+                    fontSize: "14px",
+                    fontWeight: "bold",
+                    color: "#1f2937",
+                  }}
+                >
+                  <span>TOTAL:</span>
+                  <span>
+                    Rp {lastTransaction.total.toLocaleString("id-ID")}
+                  </span>
+                </div>
+                {lastTransaction.commission > 0 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginTop: "8px",
+                      fontSize: "11px",
+                      color: "#059669",
+                      fontWeight: "500",
+                    }}
+                  >
+                    <span>Net (setelah komisi):</span>
+                    <span>
+                      Rp {lastTransaction.netTotal.toLocaleString("id-ID")}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Payment Info */}
+            <div
+              style={{
+                marginBottom: "25px",
+                padding: "12px",
+                backgroundColor: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                borderRadius: "4px",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "20px",
+                  fontSize: "12px",
+                }}
+              >
+                <div>
+                  <p
+                    style={{
+                      margin: "0 0 5px 0",
+                      fontWeight: "bold",
+                      color: "#065f46",
+                    }}
+                  >
+                    Metode Pembayaran:
+                  </p>
+                  <p style={{ margin: "0", color: "#047857" }}>
+                    <strong>{lastTransaction.paymentMethodLabel}</strong>
+                  </p>
+                </div>
+                <div>
+                  <p
+                    style={{
+                      margin: "0 0 5px 0",
+                      fontWeight: "bold",
+                      color: "#065f46",
+                    }}
+                  >
+                    Jumlah Transaksi:
+                  </p>
+                  <p style={{ margin: "0", color: "#047857" }}>
+                    <strong>{lastTransaction.items.length} Item</strong>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div
+              style={{
+                textAlign: "center",
+                borderTop: "1px solid #e5e7eb",
+                paddingTop: "20px",
+                fontSize: "11px",
+                color: "#6b7280",
+              }}
+            >
+              <p
+                style={{
+                  margin: "5px 0",
+                  fontWeight: "bold",
+                  fontSize: "13px",
+                  color: "#1f2937",
+                }}
+              >
+                Terima kasih atas kunjungan Anda!
+              </p>
+              <p style={{ margin: "5px 0" }}>
+                Kami menghargai setiap pembelian Anda
+              </p>
+              <p style={{ margin: "5px 0", fontStyle: "italic" }}>
+                Sampai jumpa kembali 😊
+              </p>
+              <p
+                style={{
+                  margin: "15px 0 0 0",
+                  fontSize: "10px",
+                  color: "#9ca3af",
+                }}
+              >
+                Dicetak: {new Date().toLocaleString("id-ID")} | Sistem POS v1.0
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </>

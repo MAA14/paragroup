@@ -1,93 +1,89 @@
 import { useState, useEffect } from "react";
 import Header from "../components/Header";
 import imgParasoesLogo from "../../imports/Group13/f6093fbbd983e79f9517960d323493d93d16f367.png";
-import { Plus, X, Save } from "lucide-react";
+import { AlertCircle, Plus, X, Save, Trash2, Edit } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
 
-interface CustomMaterial {
+interface RawMaterial {
   id: string;
   name: string;
+  brand: string;
   unit: string;
-  current: number;
-  min: number;
-  lastUpdated: string;
+  current_stock: number;
+  min_stock: number;
+  last_updated: string;
+}
+
+interface Product {
+  id: string;
+  name: string;
+  brand: string;
+  category: string;
+  price: number;
+  stock: number;
+  min_stock: number;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export default function Parasoes() {
-  const [stocks, setStocks] = useState({
-    chocolateSoes: { current: 35, min: 25 },
-    vanillaSoes: { current: 42, min: 25 },
-    terigu: { current: 80, min: 40 },
-    cream: { current: 55, min: 30 },
-    bubukCoklat: { current: 45, min: 20 },
-    vanillaExtract: { current: 38, min: 15 },
-    telur: { current: 120, min: 50 },
-    mentega: { current: 65, min: 30 },
-  });
-
-  const [customMaterials, setCustomMaterials] = useState<CustomMaterial[]>([]);
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [isAddMaterialModalOpen, setIsAddMaterialModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingItemType, setEditingItemType] = useState<
+    "product" | "material"
+  >("material");
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+  const [deletingItemName, setDeletingItemName] = useState<string>("");
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [newMaterial, setNewMaterial] = useState({
     name: "",
     unit: "",
-    current: 0,
-    min: 0,
+    current_stock: 0,
+    min_stock: 0,
+  });
+  const [editForm, setEditForm] = useState({
+    name: "",
+    unit: "",
+    current_stock: 0,
+    min_stock: 0,
   });
 
-  // Load stocks from database on mount
+  // Track local changes for batch saving
+  const [changedMaterialIds, setChangedMaterialIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [changedProductIds, setChangedProductIds] = useState<Set<string>>(
+    new Set(),
+  );
+
   useEffect(() => {
     loadStocks();
   }, []);
 
   const loadStocks = async () => {
     try {
-      const { data, error } = await supabase
-        .from("parasoes_stocks")
-        .select("*");
-      if (error) throw error;
-      if (data && data.length > 0) {
-        const dbStocks = data[0];
-        setStocks({
-          chocolateSoes: {
-            current: dbStocks.chocolate_soes_current || 35,
-            min: dbStocks.chocolate_soes_min || 25,
-          },
-          vanillaSoes: {
-            current: dbStocks.vanilla_soes_current || 42,
-            min: dbStocks.vanilla_soes_min || 25,
-          },
-          terigu: {
-            current: dbStocks.terigu_current || 80,
-            min: dbStocks.terigu_min || 40,
-          },
-          cream: {
-            current: dbStocks.cream_current || 55,
-            min: dbStocks.cream_min || 30,
-          },
-          bubukCoklat: {
-            current: dbStocks.bubuk_coklat_current || 45,
-            min: dbStocks.bubuk_coklat_min || 20,
-          },
-          vanillaExtract: {
-            current: dbStocks.vanilla_extract_current || 38,
-            min: dbStocks.vanilla_extract_min || 15,
-          },
-          telur: {
-            current: dbStocks.telur_current || 120,
-            min: dbStocks.telur_min || 50,
-          },
-          mentega: {
-            current: dbStocks.mentega_current || 65,
-            min: dbStocks.mentega_min || 30,
-          },
-        });
-        if (dbStocks.custom_materials) {
-          setCustomMaterials(dbStocks.custom_materials);
-        }
-      }
+      // Load raw materials for Parasoes brand
+      const { data: materialsData, error: materialsError } = await supabase
+        .from("raw_materials")
+        .select("*")
+        .eq("brand", "Parasoes");
+      if (materialsError) throw materialsError;
+      if (materialsData) setRawMaterials(materialsData);
+
+      // Load products for Parasoes brand
+      const { data: productsData, error: productsError } = await supabase
+        .from("products")
+        .select("*")
+        .eq("brand", "Parasoes");
+      if (productsError) throw productsError;
+      if (productsData) setProducts(productsData);
     } catch (error) {
       console.error("Error loading stocks:", error);
     }
@@ -96,30 +92,42 @@ export default function Parasoes() {
   const saveChanges = async () => {
     setIsSaving(true);
     try {
-      const { error } = await supabase.from("parasoes_stocks").upsert({
-        id: 1,
-        chocolate_soes_current: stocks.chocolateSoes.current,
-        chocolate_soes_min: stocks.chocolateSoes.min,
-        vanilla_soes_current: stocks.vanillaSoes.current,
-        vanilla_soes_min: stocks.vanillaSoes.min,
-        terigu_current: stocks.terigu.current,
-        terigu_min: stocks.terigu.min,
-        cream_current: stocks.cream.current,
-        cream_min: stocks.cream.min,
-        bubuk_coklat_current: stocks.bubukCoklat.current,
-        bubuk_coklat_min: stocks.bubukCoklat.min,
-        vanilla_extract_current: stocks.vanillaExtract.current,
-        vanilla_extract_min: stocks.vanillaExtract.min,
-        telur_current: stocks.telur.current,
-        telur_min: stocks.telur.min,
-        mentega_current: stocks.mentega.current,
-        mentega_min: stocks.mentega.min,
-        custom_materials: customMaterials,
-        updated_at: new Date().toISOString(),
-      });
-      if (error) throw error;
+      // Save changed raw materials
+      for (const material of rawMaterials) {
+        if (changedMaterialIds.has(material.id)) {
+          const { error } = await supabase
+            .from("raw_materials")
+            .update({
+              name: material.name,
+              unit: material.unit,
+              current_stock: material.current_stock,
+              min_stock: material.min_stock,
+              last_updated: new Date().toISOString(),
+            })
+            .eq("id", material.id);
+          if (error) throw error;
+        }
+      }
+
+      // Save changed products
+      for (const product of products) {
+        if (changedProductIds.has(product.id)) {
+          const { error } = await supabase
+            .from("products")
+            .update({
+              stock: product.stock,
+              min_stock: product.min_stock,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", product.id);
+          if (error) throw error;
+        }
+      }
+
       toast.success("Perubahan berhasil disimpan!");
       setHasChanges(false);
+      setChangedMaterialIds(new Set());
+      setChangedProductIds(new Set());
     } catch (error) {
       toast.error("Gagal menyimpan perubahan");
       console.error("Error saving stocks:", error);
@@ -128,51 +136,164 @@ export default function Parasoes() {
     }
   };
 
-  const updateStock = (key: keyof typeof stocks, delta: number) => {
-    setStocks((prev) => ({
-      ...prev,
-      [key]: {
-        ...prev[key],
-        current: Math.max(0, prev[key].current + delta),
-      },
-    }));
-    setHasChanges(true);
-  };
-
-  const updateCustomMaterialStock = (id: string, delta: number) => {
-    setCustomMaterials((prev) =>
-      prev.map((material) =>
-        material.id === id
-          ? {
-              ...material,
-              current: Math.max(0, material.current + delta),
-              lastUpdated: new Date().toISOString().split("T")[0],
-            }
-          : material,
+  const updateProductStock = (id: string, delta: number) => {
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === id ? { ...p, stock: Math.max(0, p.stock + delta) } : p,
       ),
     );
+    setChangedProductIds((prev) => new Set(prev).add(id));
     setHasChanges(true);
   };
 
-  const handleAddMaterial = () => {
+  const updateMaterialStock = (id: string, delta: number) => {
+    setRawMaterials((prev) =>
+      prev.map((m) =>
+        m.id === id
+          ? {
+            ...m,
+            current_stock: Math.max(0, m.current_stock + delta),
+            last_updated: new Date().toISOString().split("T")[0],
+          }
+          : m,
+      ),
+    );
+    setChangedMaterialIds((prev) => new Set(prev).add(id));
+    setHasChanges(true);
+  };
+
+  const handleAddMaterial = async () => {
     if (!newMaterial.name || !newMaterial.unit) {
       toast.error("Mohon isi nama bahan dan satuan!");
       return;
     }
 
-    const material: CustomMaterial = {
-      id: Date.now().toString(),
-      name: newMaterial.name,
-      unit: newMaterial.unit,
-      current: newMaterial.current,
-      min: newMaterial.min,
-      lastUpdated: new Date().toISOString().split("T")[0],
-    };
+    const id =
+      newMaterial.name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
 
-    setCustomMaterials((prev) => [...prev, material]);
-    toast.success("Bahan baru berhasil ditambahkan!");
-    setIsAddMaterialModalOpen(false);
-    setNewMaterial({ name: "", unit: "", current: 0, min: 0 });
+    try {
+      const { data, error } = await supabase
+        .from("raw_materials")
+        .insert({
+          id,
+          name: newMaterial.name,
+          brand: "Parasoes",
+          unit: newMaterial.unit,
+          current_stock: newMaterial.current_stock,
+          min_stock: newMaterial.min_stock,
+          last_updated: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setRawMaterials((prev) => [...prev, data]);
+      toast.success("Bahan baru berhasil ditambahkan!");
+      setIsAddMaterialModalOpen(false);
+      setNewMaterial({ name: "", unit: "", current_stock: 0, min_stock: 0 });
+    } catch (error) {
+      toast.error("Gagal menambahkan bahan baru");
+      console.error("Error adding material:", error);
+    }
+  };
+
+  const handleEditProduct = (product: Product) => {
+    setEditingItemId(product.id);
+    setEditingItemType("product");
+    setEditForm({
+      name: product.name,
+      unit: getProductUnit(product.category),
+      current_stock: product.stock,
+      min_stock: product.min_stock,
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditMaterial = (material: RawMaterial) => {
+    setEditingItemId(material.id);
+    setEditingItemType("material");
+    setEditForm({
+      name: material.name,
+      unit: material.unit,
+      current_stock: material.current_stock,
+      min_stock: material.min_stock,
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingItemId) return;
+
+    if (editingItemType === "product") {
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === editingItemId
+            ? {
+              ...p,
+              stock: editForm.current_stock,
+              min_stock: editForm.min_stock,
+            }
+            : p,
+        ),
+      );
+      setChangedProductIds((prev) => new Set(prev).add(editingItemId));
+    } else {
+      if (!editForm.name || !editForm.unit) {
+        toast.error("Mohon isi nama bahan dan satuan!");
+        return;
+      }
+      setRawMaterials((prev) =>
+        prev.map((m) =>
+          m.id === editingItemId
+            ? {
+              ...m,
+              name: editForm.name,
+              unit: editForm.unit,
+              current_stock: editForm.current_stock,
+              min_stock: editForm.min_stock,
+              last_updated: new Date().toISOString().split("T")[0],
+            }
+            : m,
+        ),
+      );
+      setChangedMaterialIds((prev) => new Set(prev).add(editingItemId));
+    }
+
+    setHasChanges(true);
+    toast.success("Stok berhasil diupdate!");
+    setIsEditModalOpen(false);
+    setEditingItemId(null);
+  };
+
+  const confirmDeleteMaterial = (id: string, name: string) => {
+    setDeletingItemId(id);
+    setDeletingItemName(name);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteMaterial = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("raw_materials")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+
+      setRawMaterials((prev) => prev.filter((m) => m.id !== id));
+      toast.success("Bahan berhasil dihapus!");
+      setIsDeleteModalOpen(false);
+      setDeletingItemId(null);
+      setDeletingItemName("");
+    } catch (error) {
+      toast.error("Gagal menghapus bahan");
+      console.error("Error deleting material:", error);
+    }
+  };
+
+  const getProgressColor = (current: number, min: number) => {
+    if (current <= min) return "#fb2c36";
+    return "#00c950";
   };
 
   const getProgressPercentage = (current: number, min: number) => {
@@ -180,16 +301,28 @@ export default function Parasoes() {
     return Math.min((current / total) * 100, 100);
   };
 
-  const totalProducts =
-    stocks.chocolateSoes.current + stocks.vanillaSoes.current;
-  const totalRawMaterials =
-    stocks.terigu.current +
-    stocks.cream.current +
-    stocks.bubukCoklat.current +
-    stocks.vanillaExtract.current +
-    stocks.telur.current +
-    stocks.mentega.current +
-    customMaterials.reduce((sum, mat) => sum + mat.current, 0);
+  const getProductUnit = (category: string) => {
+    switch (category) {
+      case "pastry":
+        return "pcs";
+      default:
+        return "pcs";
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    try {
+      return new Date(dateStr).toISOString().split("T")[0];
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const totalProducts = products.reduce((sum, p) => sum + p.stock, 0);
+  const totalRawMaterials = rawMaterials.reduce(
+    (sum, m) => sum + m.current_stock,
+    0,
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -305,123 +438,98 @@ export default function Parasoes() {
             Stok Produk
           </h2>
           <div className="grid grid-cols-2 gap-6">
-            {/* Chocolate Soes */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Chocolate Soes
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-27
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  {stocks.chocolateSoes.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    pcs
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 25 pcs
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
+            {products.map((product) => {
+              const unit = getProductUnit(product.category);
+              return (
                 <div
-                  className="h-[8px] rounded-full bg-[#00c950]"
-                  style={{
-                    width: `${getProgressPercentage(stocks.chocolateSoes.current, stocks.chocolateSoes.min)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("chocolateSoes", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px] text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
+                  key={product.id}
+                  className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5 relative"
                 >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("chocolateSoes", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
-
-            {/* Vanilla Soes */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Vanilla Soes
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-27
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  {stocks.vanillaSoes.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    pcs
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 25 pcs
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
-                <div
-                  className="h-[8px] rounded-full bg-[#00c950]"
-                  style={{
-                    width: `${getProgressPercentage(stocks.vanillaSoes.current, stocks.vanillaSoes.min)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("vanillaSoes", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px] text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("vanillaSoes", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
+                  {/* Edit Button */}
+                  <div className="absolute top-4 right-4 flex gap-2">
+                    <button
+                      onClick={() => handleEditProduct(product)}
+                      className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-[8px] transition"
+                      title="Edit produk"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3
+                        className="text-[18px] font-medium leading-[27px] text-[#101828]"
+                        style={{ fontFamily: "Inter, sans-serif" }}
+                      >
+                        {product.name}
+                      </h3>
+                      <p
+                        className="text-[14px] leading-[20px] text-[#6a7282]"
+                        style={{ fontFamily: "Inter, sans-serif" }}
+                      >
+                        Updated: {formatDate(product.updated_at)}
+                      </p>
+                    </div>
+                    {product.stock <= product.min_stock && (
+                      <div className="bg-[#fef2f2] rounded-[4px] px-2 py-1 flex items-center gap-1">
+                        <AlertCircle className="w-4 h-4 text-[#e7000b]" />
+                        <span
+                          className="text-[12px] font-medium leading-[16px] text-[#e7000b]"
+                          style={{ fontFamily: "Inter, sans-serif" }}
+                        >
+                          Hampir Habis
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mb-3">
+                    <p
+                      className="text-[30px] font-semibold leading-[36px] text-[#101828]"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      {product.stock}{" "}
+                      <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
+                        {unit}
+                      </span>
+                    </p>
+                    <p
+                      className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      Min: {product.min_stock} {unit}
+                    </p>
+                  </div>
+                  <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
+                    <div
+                      className="h-[8px] rounded-full"
+                      style={{
+                        width: `${getProgressPercentage(product.stock, product.min_stock)}%`,
+                        backgroundColor: getProgressColor(
+                          product.stock,
+                          product.min_stock,
+                        ),
+                      }}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => updateProductStock(product.id, -1)}
+                      className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px] text-[#0a0a0a]"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      - Use
+                    </button>
+                    <button
+                      onClick={() => updateProductStock(product.id, 1)}
+                      className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium leading-[20px]"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      + Restock
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -435,20 +543,19 @@ export default function Parasoes() {
               Stok Bahan
             </h2>
             <div className="flex gap-3">
-              {hasChanges && (
-                <button
-                  onClick={saveChanges}
-                  disabled={isSaving}
-                  className="bg-[#22c55e] hover:bg-green-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-[10px] flex items-center gap-2 text-[14px] font-medium"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  <Save className="w-4 h-4" />
-                  {isSaving ? "Menyimpan..." : "Simpan Perubahan"}
-                </button>
-              )}
+              <button
+                onClick={saveChanges}
+                disabled={isSaving || !hasChanges}
+                className="bg-[#22c55e] hover:bg-green-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-[10px] flex items-center gap-2 text-[14px] font-medium"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                <Save className="w-4 h-4" />
+                {isSaving ? "Menyimpan..." : "Simpan Perubahan"}
+              </button>
+
               <button
                 onClick={() => setIsAddMaterialModalOpen(true)}
-                className="bg-[#101828] hover:bg-gray-900 text-white px-4 py-2 rounded-[10px] flex items-center gap-2 text-[14px] font-medium"
+                className="bg-[#e17100] hover:bg-[#f54900] text-white px-4 py-2 rounded-[10px] flex items-center gap-2 text-[14px] font-medium"
                 style={{ fontFamily: "Inter, sans-serif" }}
               >
                 <Plus className="w-4 h-4" />
@@ -457,367 +564,30 @@ export default function Parasoes() {
             </div>
           </div>
           <div className="grid grid-cols-3 gap-6">
-            {/* Terigu */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Terigu
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-27
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  {stocks.terigu.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    pcs
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 40 pcs
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
-                <div
-                  className="h-[8px] rounded-full bg-[#00c950]"
-                  style={{
-                    width: `${getProgressPercentage(stocks.terigu.current, stocks.terigu.min)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("terigu", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("terigu", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
-
-            {/* Cream */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Cream
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-26
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  {stocks.cream.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    kg
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 30 kg
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
-                <div
-                  className="h-[8px] rounded-full bg-[#00c950]"
-                  style={{
-                    width: `${getProgressPercentage(stocks.cream.current, stocks.cream.min)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("cream", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("cream", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
-
-            {/* Bubuk Coklat */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Bubuk Coklat
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-27
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  {stocks.bubukCoklat.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    kg
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 20 kg
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
-                <div
-                  className="h-[8px] rounded-full bg-[#00c950]"
-                  style={{
-                    width: `${getProgressPercentage(stocks.bubukCoklat.current, stocks.bubukCoklat.min)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("bubukCoklat", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("bubukCoklat", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
-
-            {/* Vanilla Extract */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Vanilla Extract
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-26
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  {stocks.vanillaExtract.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    bottles
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 15 bottles
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
-                <div
-                  className="h-[8px] rounded-full bg-[#00c950]"
-                  style={{
-                    width: `${getProgressPercentage(stocks.vanillaExtract.current, stocks.vanillaExtract.min)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("vanillaExtract", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("vanillaExtract", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
-
-            {/* Telur */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Telur
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-27
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  {stocks.telur.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    pcs
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 50 pcs
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
-                <div
-                  className="h-[8px] rounded-full bg-[#00c950]"
-                  style={{
-                    width: `${getProgressPercentage(stocks.telur.current, stocks.telur.min)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("telur", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("telur", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
-
-            {/* Mentega */}
-            <div className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5">
-              <div className="mb-3">
-                <h3
-                  className="text-[18px] font-medium leading-[27px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Mentega
-                </h3>
-                <p
-                  className="text-[14px] leading-[20px] text-[#6a7282]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Updated: 2026-04-27
-                </p>
-              </div>
-              <div className="mb-3">
-                <p
-                  className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  {stocks.mentega.current}{" "}
-                  <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
-                    kg
-                  </span>
-                </p>
-                <p
-                  className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  Min: 30 kg
-                </p>
-              </div>
-              <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
-                <div
-                  className="h-[8px] rounded-full bg-[#00c950]"
-                  style={{
-                    width: `${getProgressPercentage(stocks.mentega.current, stocks.mentega.min)}%`,
-                  }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStock("mentega", -1)}
-                  className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  - Use
-                </button>
-                <button
-                  onClick={() => updateStock("mentega", 1)}
-                  className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
-                  style={{ fontFamily: "Inter, sans-serif" }}
-                >
-                  + Restock
-                </button>
-              </div>
-            </div>
-
-            {/* Custom Materials */}
-            {customMaterials.map((material) => (
+            {rawMaterials.map((material) => (
               <div
                 key={material.id}
-                className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5"
+                className="bg-white border-[#e5e7eb] border-[0.8px] rounded-[10px] p-5 relative"
               >
-                <div className="mb-3">
+                {/* Edit and Delete Buttons */}
+                <div className="absolute top-4 right-4 flex gap-2">
+                  <button
+                    onClick={() => handleEditMaterial(material)}
+                    className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-[8px] transition"
+                    title="Edit bahan"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => confirmDeleteMaterial(material.id, material.name)}
+                    className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-[8px] transition"
+                    title="Hapus bahan"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="mb-3 pr-24">
                   <h3
                     className="text-[18px] font-medium leading-[27px] text-[#101828]"
                     style={{ fontFamily: "Inter, sans-serif" }}
@@ -828,7 +598,7 @@ export default function Parasoes() {
                     className="text-[14px] leading-[20px] text-[#6a7282]"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
-                    Updated: {material.lastUpdated}
+                    Updated: {formatDate(material.last_updated)}
                   </p>
                 </div>
                 <div className="mb-3">
@@ -836,7 +606,7 @@ export default function Parasoes() {
                     className="text-[30px] font-semibold leading-[36px] text-[#101828]"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
-                    {material.current}{" "}
+                    {material.current_stock}{" "}
                     <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
                       {material.unit}
                     </span>
@@ -845,27 +615,31 @@ export default function Parasoes() {
                     className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
-                    Min: {material.min} {material.unit}
+                    Min: {material.min_stock} {material.unit}
                   </p>
                 </div>
                 <div className="bg-[#e5e7eb] h-[8px] rounded-full mb-4">
                   <div
-                    className="h-[8px] rounded-full bg-[#00c950]"
+                    className="h-[8px] rounded-full"
                     style={{
-                      width: `${getProgressPercentage(material.current, material.min)}%`,
+                      width: `${getProgressPercentage(material.current_stock, material.min_stock)}%`,
+                      backgroundColor: getProgressColor(
+                        material.current_stock,
+                        material.min_stock,
+                      ),
                     }}
                   />
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => updateCustomMaterialStock(material.id, -1)}
+                    onClick={() => updateMaterialStock(material.id, -1)}
                     className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
                     - Use
                   </button>
                   <button
-                    onClick={() => updateCustomMaterialStock(material.id, 1)}
+                    onClick={() => updateMaterialStock(material.id, 1)}
                     className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
@@ -878,9 +652,157 @@ export default function Parasoes() {
         </div>
       </main>
 
+      {/* Edit Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-[rgba(0,0,0,0.5)] bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-[10px] max-w-md w-full">
+            <div className="flex items-center justify-between p-6 border-b border-[#e5e7eb]">
+              <h2
+                className="text-[20px] font-semibold text-[#101828]"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                {editingItemType === "product" ? "Edit Produk" : "Edit Bahan"}
+              </h2>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label
+                  className="block text-[14px] font-medium text-[#364153] mb-2"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                >
+                  Nama {editingItemType === "product" ? "Produk" : "Bahan"}
+                </label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, name: e.target.value })
+                  }
+                  placeholder="Contoh: Sirup Vanilla"
+                  className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                  disabled={editingItemType === "product"}
+                />
+              </div>
+
+              {editingItemType === "material" && (
+                <div>
+                  <label
+                    className="block text-[14px] font-medium text-[#364153] mb-2"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    Satuan
+                  </label>
+                  <select
+                    value={editForm.unit}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        unit: e.target.value,
+                      })
+                    }
+                    className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
+                    style={{ fontFamily: "Inter, sans-serif" }}
+                  >
+                    <option value="">Pilih satuan...</option>
+                    <option value="kg">kg</option>
+                    <option value="liter">liter</option>
+                    <option value="botol">botol</option>
+                    <option value="bungkus">bungkus</option>
+                    <option value="pcs">pcs</option>
+                    <option value="gram">gram</option>
+                    <option value="ml">ml</option>
+                    <option value="Karton">Karton</option>
+                    <option value="bottles">bottles</option>
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label
+                  className="block text-[14px] font-medium text-[#364153] mb-2"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                >
+                  Stok Saat Ini
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={
+                    editForm.current_stock === 0 ? "" : editForm.current_stock
+                  }
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      current_stock:
+                        e.target.value === ""
+                          ? 0
+                          : parseInt(e.target.value) || 0,
+                    })
+                  }
+                  placeholder="0"
+                  className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                />
+              </div>
+
+              <div>
+                <label
+                  className="block text-[14px] font-medium text-[#364153] mb-2"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                >
+                  Stok Minimum
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editForm.min_stock === 0 ? "" : editForm.min_stock}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      min_stock:
+                        e.target.value === ""
+                          ? 0
+                          : parseInt(e.target.value) || 0,
+                    })
+                  }
+                  placeholder="0"
+                  className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
+                  style={{ fontFamily: "Inter, sans-serif" }}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-6 border-t border-[#e5e7eb]">
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="flex-1 px-4 py-2 border border-[#d1d5dc] text-[#101828] rounded-[10px] font-medium hover:bg-gray-50"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 px-4 py-2 bg-[#101828] text-white rounded-[10px] font-medium hover:bg-gray-900"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                Simpan Perubahan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Material Modal */}
       {isAddMaterialModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-[rgba(0,0,0,0.5)] bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-[10px] max-w-md w-full">
             <div className="flex items-center justify-between p-6 border-b border-[#e5e7eb]">
               <h2
@@ -911,7 +833,7 @@ export default function Parasoes() {
                   onChange={(e) =>
                     setNewMaterial({ ...newMaterial, name: e.target.value })
                   }
-                  placeholder="Contoh: Susu Kental Manis"
+                  placeholder="Contoh: Sirup Vanilla"
                   className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 />
@@ -924,16 +846,25 @@ export default function Parasoes() {
                 >
                   Satuan
                 </label>
-                <input
-                  type="text"
+                <select
                   value={newMaterial.unit}
                   onChange={(e) =>
                     setNewMaterial({ ...newMaterial, unit: e.target.value })
                   }
-                  placeholder="Contoh: botol, kg, liter"
                   className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
                   style={{ fontFamily: "Inter, sans-serif" }}
-                />
+                >
+                  <option value="">Pilih satuan...</option>
+                  <option value="kg">kg</option>
+                  <option value="liter">liter</option>
+                  <option value="botol">botol</option>
+                  <option value="bungkus">bungkus</option>
+                  <option value="pcs">pcs</option>
+                  <option value="gram">gram</option>
+                  <option value="ml">ml</option>
+                  <option value="Karton">Karton</option>
+                  <option value="bottles">bottles</option>
+                </select>
               </div>
 
               <div>
@@ -946,13 +877,21 @@ export default function Parasoes() {
                 <input
                   type="number"
                   min="0"
-                  value={newMaterial.current}
+                  value={
+                    newMaterial.current_stock === 0
+                      ? ""
+                      : newMaterial.current_stock
+                  }
                   onChange={(e) =>
                     setNewMaterial({
                       ...newMaterial,
-                      current: parseInt(e.target.value) || 0,
+                      current_stock:
+                        e.target.value === ""
+                          ? 0
+                          : parseInt(e.target.value) || 0,
                     })
                   }
+                  placeholder="0"
                   className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 />
@@ -968,13 +907,19 @@ export default function Parasoes() {
                 <input
                   type="number"
                   min="0"
-                  value={newMaterial.min}
+                  value={
+                    newMaterial.min_stock === 0 ? "" : newMaterial.min_stock
+                  }
                   onChange={(e) =>
                     setNewMaterial({
                       ...newMaterial,
-                      min: parseInt(e.target.value) || 0,
+                      min_stock:
+                        e.target.value === ""
+                          ? 0
+                          : parseInt(e.target.value) || 0,
                     })
                   }
+                  placeholder="0"
                   className="w-full px-4 py-2 border border-[#d1d5dc] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#101828]"
                   style={{ fontFamily: "Inter, sans-serif" }}
                 />
@@ -996,6 +941,46 @@ export default function Parasoes() {
                   Tambah Bahan
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-[rgba(0,0,0,0.5)] bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-[10px] max-w-md w-full p-6">
+            <h2
+              className="text-[20px] font-semibold text-[#101828] mb-4"
+              style={{ fontFamily: "Inter, sans-serif" }}
+            >
+              Konfirmasi Hapus
+            </h2>
+            <p
+              className="text-[16px] text-gray-600 mb-6"
+              style={{ fontFamily: "Inter, sans-serif" }}
+            >
+              Are you sure want delete {deletingItemName}?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeletingItemId(null);
+                  setDeletingItemName("");
+                }}
+                className="flex-1 px-4 py-2 border border-[#d1d5dc] text-gray-700 rounded-[10px] hover:bg-gray-50 font-medium"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => deletingItemId && handleDeleteMaterial(deletingItemId)}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-[10px] font-medium"
+                style={{ fontFamily: "Inter, sans-serif" }}
+              >
+                Hapus
+              </button>
             </div>
           </div>
         </div>

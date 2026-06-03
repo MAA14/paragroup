@@ -695,6 +695,794 @@ export default function Reports() {
             <p className="mt-1">© 2026 Paradose & Parasoes UMKM</p>
           </div>
         </div>
+
+        {/* Professional Financial Report Print Template */}
+        <div id="printable-report" style={{ display: "none" }}>
+          <div
+            style={{
+              maxWidth: "900px",
+              margin: "0 auto",
+              padding: "40px 30px",
+              fontFamily: "Arial, sans-serif",
+              backgroundColor: "#fff",
+              color: "#000",
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                textAlign: "center",
+                marginBottom: "30px",
+                borderBottom: "3px solid #000",
+                paddingBottom: "20px",
+              }}
+            >
+              <h1
+                style={{
+                  fontSize: "24px",
+                  fontWeight: "bold",
+                  margin: "0 0 5px 0",
+                }}
+              >
+                PARADOSE & PARASOES UMKM
+              </h1>
+              <p style={{ margin: "5px 0", fontSize: "12px" }}>
+                Kopi Spesial & Pastry Choux Premium
+              </p>
+              <p style={{ margin: "5px 0", fontSize: "11px" }}>
+                Jl. Kopi No. 123, Jakarta | Phone: 08XX-XXXX-XXXX
+              </p>
+            </div>
+
+            {/* Report Title */}
+            <div style={{ textAlign: "center", marginBottom: "25px" }}>
+              <h2
+                style={{
+                  fontSize: "18px",
+                  fontWeight: "bold",
+                  margin: "0",
+                  textDecoration: "underline",
+                }}
+              >
+                LAPORAN KEUANGAN BULANAN
+              </h2>
+              <p style={{ margin: "10px 0 5px 0", fontSize: "12px" }}>
+                Periode:{" "}
+                {new Date(selectedMonth).toLocaleDateString("id-ID", {
+                  month: "long",
+                  year: "numeric",
+                })}
+              </p>
+              <p style={{ margin: "0", fontSize: "12px" }}>
+                Brand:{" "}
+                {selectedBrand === "all"
+                  ? "Semua Brand"
+                  : selectedBrand === "paradose"
+                    ? "Paradose (Coffee)"
+                    : "Parasoes (Choux)"}
+              </p>
+              <p style={{ margin: "5px 0", fontSize: "11px", color: "#666" }}>
+                Dicetak:{" "}
+                {new Date().toLocaleDateString("id-ID", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                })}{" "}
+                pukul{" "}
+                {new Date().toLocaleTimeString("id-ID", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+            </div>
+
+            {/* Financial Summary Table */}
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                marginBottom: "25px",
+                fontSize: "12px",
+              }}
+            >
+              <thead>
+                <tr style={{ backgroundColor: "#f3f4f6" }}>
+                  <th
+                    style={{
+                      border: "1px solid #000",
+                      padding: "10px",
+                      fontWeight: "bold",
+                      textAlign: "left",
+                    }}
+                  >
+                    Keterangan
+                  </th>
+                  <th
+                    style={{
+                      border: "1px solid #000",
+                      padding: "10px",
+                      fontWeight: "bold",
+                      textAlign: "right",
+                    }}
+                  >
+                    Jumlah
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style={{ border: "1px solid #000", padding: "10px" }}>
+                    Total Penjualan (Unit)
+                  </td>
+                  <td
+                    style={{
+                      border: "1px solid #000",
+                      padding: "10px",
+                      textAlign: "right",
+                      fontWeight: "500",
+                    }}
+                  >
+                    {filteredData.sales || 0}
+                  </td>
+                </tr>
+                <tr style={{ backgroundColor: "#f9fafb" }}>
+                  <td style={{ border: "1px solid #000", padding: "10px" }}>
+                    Total Revenue
+                  </td>
+                  <td
+                    style={{
+                      border: "1px solid #000",
+                      padding: "10px",
+                      textAlign: "right",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Rp {totalRevenue.toLocaleString("id-ID")}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ border: "1px solid #000", padding: "10px" }}>
+                    Total Biaya / Costs
+                  </td>
+                  <td
+                    style={{
+                      border: "1px solid #000",
+                      padding: "10px",
+                      textAlign: "right",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Rp {totalCosts.toLocaleString("id-ID")}
+                  </td>
+                </tr>
+                <tr style={{ backgroundColor: "#f0fdf4" }}>
+                  <td
+                    style={{
+                      border: "1px solid #000",
+                      padding: "10px",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Net Profit / Laba Bersih
+                  </td>
+                  <td
+                    style={{
+                      border: "1px solid #000",
+                      padding: "10px",
+                      textAlign: "right",
+                      fontWeight: "bold",
+                      color: "#059669",
+                    }}
+                  >
+                    Rp {totalProfit.toLocaleString("id-ID")}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            {/* Brand Details */}
+            {(selectedBrand === "all" || selectedBrand === "paradose") && (
+              <>
+                <h3
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: "bold",
+                    marginTop: "25px",
+                    marginBottom: "10px",
+                    borderBottom: "2px solid #000",
+                    paddingBottom: "5px",
+                  }}
+                >
+                  RINCIAN PENJUALAN - PARADOSE (COFFEE)
+                </h3>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    marginBottom: "20px",
+                    fontSize: "11px",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ backgroundColor: "#f3f4f6" }}>
+                      <th
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          fontWeight: "bold",
+                          textAlign: "left",
+                        }}
+                      >
+                        Produk
+                      </th>
+                      <th
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          fontWeight: "bold",
+                          textAlign: "center",
+                        }}
+                      >
+                        Terjual
+                      </th>
+                      <th
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          fontWeight: "bold",
+                          textAlign: "right",
+                        }}
+                      >
+                        Revenue
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayData.paradose.products.length > 0 ? (
+                      displayData.paradose.products.map((product, idx) => (
+                        <tr
+                          key={idx}
+                          style={{
+                            backgroundColor: idx % 2 === 0 ? "#fff" : "#f9fafb",
+                          }}
+                        >
+                          <td
+                            style={{ border: "1px solid #000", padding: "8px" }}
+                          >
+                            {product.name}
+                          </td>
+                          <td
+                            style={{
+                              border: "1px solid #000",
+                              padding: "8px",
+                              textAlign: "center",
+                            }}
+                          >
+                            {product.sold}
+                          </td>
+                          <td
+                            style={{
+                              border: "1px solid #000",
+                              padding: "8px",
+                              textAlign: "right",
+                            }}
+                          >
+                            Rp {product.revenue.toLocaleString("id-ID")}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={3}
+                          style={{
+                            border: "1px solid #000",
+                            padding: "8px",
+                            textAlign: "center",
+                            color: "#999",
+                          }}
+                        >
+                          -
+                        </td>
+                      </tr>
+                    )}
+                    <tr
+                      style={{ backgroundColor: "#f3f4f6", fontWeight: "bold" }}
+                    >
+                      <td style={{ border: "1px solid #000", padding: "8px" }}>
+                        TOTAL PARADOSE
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "center",
+                        }}
+                      >
+                        {displayData.paradose.sales}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "right",
+                        }}
+                      >
+                        Rp{" "}
+                        {displayData.paradose.revenue.toLocaleString("id-ID")}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {/* Parasoes Details */}
+            {(selectedBrand === "all" || selectedBrand === "parasoes") && (
+              <>
+                <h3
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: "bold",
+                    marginTop: "25px",
+                    marginBottom: "10px",
+                    borderBottom: "2px solid #000",
+                    paddingBottom: "5px",
+                  }}
+                >
+                  RINCIAN PENJUALAN - PARASOES (CHOUX)
+                </h3>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    marginBottom: "20px",
+                    fontSize: "11px",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ backgroundColor: "#f3f4f6" }}>
+                      <th
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          fontWeight: "bold",
+                          textAlign: "left",
+                        }}
+                      >
+                        Produk
+                      </th>
+                      <th
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          fontWeight: "bold",
+                          textAlign: "center",
+                        }}
+                      >
+                        Terjual
+                      </th>
+                      <th
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          fontWeight: "bold",
+                          textAlign: "right",
+                        }}
+                      >
+                        Revenue
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayData.parasoes.products.length > 0 ? (
+                      displayData.parasoes.products.map((product, idx) => (
+                        <tr
+                          key={idx}
+                          style={{
+                            backgroundColor: idx % 2 === 0 ? "#fff" : "#f9fafb",
+                          }}
+                        >
+                          <td
+                            style={{ border: "1px solid #000", padding: "8px" }}
+                          >
+                            {product.name}
+                          </td>
+                          <td
+                            style={{
+                              border: "1px solid #000",
+                              padding: "8px",
+                              textAlign: "center",
+                            }}
+                          >
+                            {product.sold}
+                          </td>
+                          <td
+                            style={{
+                              border: "1px solid #000",
+                              padding: "8px",
+                              textAlign: "right",
+                            }}
+                          >
+                            Rp {product.revenue.toLocaleString("id-ID")}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={3}
+                          style={{
+                            border: "1px solid #000",
+                            padding: "8px",
+                            textAlign: "center",
+                            color: "#999",
+                          }}
+                        >
+                          -
+                        </td>
+                      </tr>
+                    )}
+                    <tr
+                      style={{ backgroundColor: "#f3f4f6", fontWeight: "bold" }}
+                    >
+                      <td style={{ border: "1px solid #000", padding: "8px" }}>
+                        TOTAL PARASOES
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "center",
+                        }}
+                      >
+                        {displayData.parasoes.sales}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "right",
+                        }}
+                      >
+                        Rp{" "}
+                        {displayData.parasoes.revenue.toLocaleString("id-ID")}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {/* Online Sales - Only show for "all" brand */}
+            {selectedBrand === "all" && (
+              <>
+                <h3
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: "bold",
+                    marginTop: "25px",
+                    marginBottom: "10px",
+                    borderBottom: "2px solid #000",
+                    paddingBottom: "5px",
+                  }}
+                >
+                  PENJUALAN ONLINE
+                </h3>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    marginBottom: "20px",
+                    fontSize: "11px",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ backgroundColor: "#f3f4f6" }}>
+                      <th
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          fontWeight: "bold",
+                          textAlign: "left",
+                        }}
+                      >
+                        Platform
+                      </th>
+                      <th
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          fontWeight: "bold",
+                          textAlign: "center",
+                        }}
+                      >
+                        Orders
+                      </th>
+                      <th
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          fontWeight: "bold",
+                          textAlign: "right",
+                        }}
+                      >
+                        Revenue
+                      </th>
+                      <th
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          fontWeight: "bold",
+                          textAlign: "right",
+                        }}
+                      >
+                        Komisi
+                      </th>
+                      <th
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          fontWeight: "bold",
+                          textAlign: "right",
+                        }}
+                      >
+                        Net
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ backgroundColor: "#fff" }}>
+                      <td style={{ border: "1px solid #000", padding: "8px" }}>
+                        ShopeeFood
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "center",
+                        }}
+                      >
+                        {displayData.online.shopee.orders}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "right",
+                        }}
+                      >
+                        Rp{" "}
+                        {displayData.online.shopee.revenue.toLocaleString(
+                          "id-ID",
+                        )}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "right",
+                        }}
+                      >
+                        Rp{" "}
+                        {displayData.online.shopee.commission.toLocaleString(
+                          "id-ID",
+                        )}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "right",
+                        }}
+                      >
+                        Rp{" "}
+                        {displayData.online.shopee.net.toLocaleString("id-ID")}
+                      </td>
+                    </tr>
+                    <tr style={{ backgroundColor: "#f9fafb" }}>
+                      <td style={{ border: "1px solid #000", padding: "8px" }}>
+                        GoFood
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "center",
+                        }}
+                      >
+                        {displayData.online.gofood.orders}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "right",
+                        }}
+                      >
+                        Rp{" "}
+                        {displayData.online.gofood.revenue.toLocaleString(
+                          "id-ID",
+                        )}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "right",
+                        }}
+                      >
+                        Rp{" "}
+                        {displayData.online.gofood.commission.toLocaleString(
+                          "id-ID",
+                        )}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "right",
+                        }}
+                      >
+                        Rp{" "}
+                        {displayData.online.gofood.net.toLocaleString("id-ID")}
+                      </td>
+                    </tr>
+                    <tr style={{ backgroundColor: "#fff" }}>
+                      <td style={{ border: "1px solid #000", padding: "8px" }}>
+                        GrabFood
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "center",
+                        }}
+                      >
+                        {displayData.online.grabfood.orders}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "right",
+                        }}
+                      >
+                        Rp{" "}
+                        {displayData.online.grabfood.revenue.toLocaleString(
+                          "id-ID",
+                        )}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "right",
+                        }}
+                      >
+                        Rp{" "}
+                        {displayData.online.grabfood.commission.toLocaleString(
+                          "id-ID",
+                        )}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          textAlign: "right",
+                        }}
+                      >
+                        Rp{" "}
+                        {displayData.online.grabfood.net.toLocaleString(
+                          "id-ID",
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {/* Expenses - Only show for "all" brand */}
+            {selectedBrand === "all" && displayData.expenses.length > 0 && (
+              <>
+                <h3
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: "bold",
+                    marginTop: "25px",
+                    marginBottom: "10px",
+                    borderBottom: "2px solid #000",
+                    paddingBottom: "5px",
+                  }}
+                >
+                  DAFTAR BIAYA / EXPENSES
+                </h3>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    marginBottom: "20px",
+                    fontSize: "11px",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ backgroundColor: "#f3f4f6" }}>
+                      <th
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          fontWeight: "bold",
+                          textAlign: "left",
+                        }}
+                      >
+                        Kategori
+                      </th>
+                      <th
+                        style={{
+                          border: "1px solid #000",
+                          padding: "8px",
+                          fontWeight: "bold",
+                          textAlign: "right",
+                        }}
+                      >
+                        Jumlah
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayData.expenses.map((expense, idx) => (
+                      <tr
+                        key={idx}
+                        style={{
+                          backgroundColor: idx % 2 === 0 ? "#fff" : "#f9fafb",
+                        }}
+                      >
+                        <td
+                          style={{ border: "1px solid #000", padding: "8px" }}
+                        >
+                          {expense.category}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #000",
+                            padding: "8px",
+                            textAlign: "right",
+                          }}
+                        >
+                          Rp {(expense.amount || 0).toLocaleString("id-ID")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {/* Footer */}
+            <div
+              style={{
+                marginTop: "40px",
+                paddingTop: "20px",
+                borderTop: "3px solid #000",
+                textAlign: "center",
+                fontSize: "11px",
+                color: "#666",
+              }}
+            >
+              <p style={{ margin: "5px 0" }}>
+                Laporan ini dibuat secara otomatis oleh Sistem Inventory
+                Management
+              </p>
+              <p style={{ margin: "5px 0" }}>
+                © 2026 Paradose & Parasoes UMKM - Semua Hak Dilindungi
+              </p>
+              <p style={{ margin: "10px 0 0 0", fontSize: "10px" }}>
+                Sistem POS v1.0
+              </p>
+            </div>
+          </div>
+        </div>
       </main>
 
       <style>{`
@@ -702,25 +1490,33 @@ export default function Reports() {
           body {
             print-color-adjust: exact;
             -webkit-print-color-adjust: exact;
+            margin: 0;
+            padding: 0;
           }
-          .print\\:hidden {
+          
+          /* Hide all page UI elements when printing */
+          header {
             display: none !important;
           }
-          .print\\:block {
+          
+          main > * {
+            display: none !important;
+          }
+          
+          #printable-report {
             display: block !important;
+            position: static !important;
+            visibility: visible !important;
           }
-          .print\\:border-2 {
-            border-width: 2px !important;
+          
+          @page {
+            size: A4;
+            margin: 10mm;
           }
-          .print\\:break-inside-avoid {
-            break-inside: avoid !important;
-          }
-          .print\\:break-before-page {
-            break-before: page !important;
-          }
-          .print\\:mb-4 {
-            margin-bottom: 1rem !important;
-          }
+        }
+        
+        #printable-report {
+          display: none;
         }
       `}</style>
     </div>
