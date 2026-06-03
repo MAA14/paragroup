@@ -142,7 +142,7 @@ export default function Parasoes() {
           const { error } = await supabase
             .from("products")
             .update({
-              stock: getProductStock(product),
+              stock: product.stock,
               min_stock: product.min_stock,
               updated_at: new Date().toISOString(),
             })
@@ -199,6 +199,33 @@ export default function Parasoes() {
       ),
     );
     setChangedMaterialIds((prev) => new Set(prev).add(id));
+    setHasChanges(true);
+  };
+
+  // New function to update product stock and adjust raw materials based on recipe
+  const updateProductStock = (productId: string, delta: number) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+    const prodRecipes = recipes.filter((r) => r.product_id === productId);
+    if (delta > 0) {
+      for (const r of prodRecipes) {
+        const material = rawMaterials.find((m) => m.id === r.material_id);
+        if (!material) continue;
+        const required = r.quantity_needed * delta;
+        if (material.current_stock < required) {
+          toast.error(`Stock bahan ${material.name} tidak cukup untuk menambah produk ${product.name}`);
+          return;
+        }
+      }
+    }
+    setProducts((prev) =>
+      prev.map((p) => (p.id === productId ? { ...p, stock: p.stock + delta } : p)),
+    );
+    setChangedProductIds((prev) => new Set(prev).add(productId));
+    prodRecipes.forEach((r) => {
+      const adjustment = -r.quantity_needed * delta;
+      updateMaterialStock(r.material_id, adjustment);
+    });
     setHasChanges(true);
   };
 
@@ -384,7 +411,7 @@ export default function Parasoes() {
     }
   };
 
-  const totalProducts = products.reduce((sum, p) => sum + getProductStock(p), 0);
+  const totalProducts = products.reduce((sum, p) => sum + (p.stock || 0), 0);
   const totalRawMaterials = rawMaterials.reduce(
     (sum, m) => sum + m.current_stock,
     0,
@@ -537,7 +564,7 @@ export default function Parasoes() {
                         Updated: {formatDate(product.updated_at)}
                       </p>
                     </div>
-                    {computedStock <= product.min_stock && (
+                    {product.stock <= product.min_stock && (
                       <div className="bg-[#fef2f2] rounded-[4px] px-2 py-1 flex items-center gap-1">
                         <AlertCircle className="w-4 h-4 text-[#e7000b]" />
                         <span
@@ -550,19 +577,14 @@ export default function Parasoes() {
                     )}
                   </div>
                   <div className="mb-3">
-                    <p
-                      className="text-[30px] font-semibold leading-[36px] text-[#101828]"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
-                      {computedStock}{" "}
-                      <span className="text-[16px] leading-[24px] text-[#4a5565] font-normal">
+                    <p className="text-[30px] font-semibold leading-[36px] text-[#101828]" style={{ fontFamily: "Inter, sans-serif" }}>
+                      {product.stock}{" "}
+                      <span className="text-[16px] leading-[24px] text-[#4a5655] font-normal">
                         {unit}
                       </span>
                     </p>
-                    <p
-                      className="text-[14px] leading-[20px] text-[#4a5565] mt-1"
-                      style={{ fontFamily: "Inter, sans-serif" }}
-                    >
+
+                    <p className="text-[14px] leading-[20px] text-[#4a5655] mt-1" style={{ fontFamily: "Inter, sans-serif" }}>
                       Min: {product.min_stock} {unit}
                     </p>
                   </div>
@@ -570,13 +592,30 @@ export default function Parasoes() {
                     <div
                       className="h-[8px] rounded-full"
                       style={{
-                        width: `${getProgressPercentage(computedStock, product.min_stock)}%`,
+                        width: `${getProgressPercentage(product.stock, product.min_stock)}%`,
                         backgroundColor: getProgressColor(
-                          computedStock,
+                          product.stock,
                           product.min_stock,
                         ),
                       }}
                     />
+                  </div>
+                  {/* Stock Adjustment Buttons */}
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => updateProductStock(product.id, -1)}
+                      className="flex-1 bg-[#f3f4f6] hover:bg-gray-300 rounded-[10px] h-[36px] text-[14px] font-medium text-[#0a0a0a]"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      - Use
+                    </button>
+                    <button
+                      onClick={() => updateProductStock(product.id, 1)}
+                      className="flex-1 bg-[#101828] hover:bg-gray-900 text-white rounded-[10px] h-[36px] text-[14px] font-medium"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      + Restock
+                    </button>
                   </div>
 
                 </div>
@@ -849,7 +888,7 @@ export default function Parasoes() {
                       Add Materials
                     </button>
                   </div>
-                  
+
                   {editRecipeItems.length === 0 ? (
                     <p className="text-[13px] text-gray-500 italic" style={{ fontFamily: "Inter, sans-serif" }}>
                       Belum ada bahan baku yang ditambahkan ke resep.
@@ -861,7 +900,7 @@ export default function Parasoes() {
                         const filteredMaterials = rawMaterials.filter(
                           m => m.brand === "Parasoes" || m.brand === "Shared"
                         );
-                        
+
                         return (
                           <div key={index} className="flex items-end gap-3 bg-gray-50 p-3 rounded-[8px] border border-gray-200">
                             <div className="flex-1">
@@ -881,7 +920,7 @@ export default function Parasoes() {
                                 ))}
                               </select>
                             </div>
-                            
+
                             <div className="w-24">
                               <label className="block text-[11px] font-medium text-gray-500 mb-1" style={{ fontFamily: "Inter, sans-serif" }}>
                                 Jumlah *
@@ -898,7 +937,7 @@ export default function Parasoes() {
                                 style={{ fontFamily: "Inter, sans-serif" }}
                               />
                             </div>
-                            
+
                             <div className="w-16">
                               <label className="block text-[11px] font-medium text-gray-500 mb-1" style={{ fontFamily: "Inter, sans-serif" }}>
                                 Satuan
@@ -907,7 +946,7 @@ export default function Parasoes() {
                                 {selectedMaterial?.unit || "-"}
                               </div>
                             </div>
-                            
+
                             <button
                               type="button"
                               onClick={() => setEditRecipeItems(prev => prev.filter((_, i) => i !== index))}

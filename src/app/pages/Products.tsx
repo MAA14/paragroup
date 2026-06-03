@@ -65,12 +65,7 @@ export default function Products() {
         if (prodRecipes.length === 0) {
           return { ...product, stock: 0 };
         }
-        const stocks = prodRecipes.map(r => {
-          const mat = rawMats.find(m => m.id === r.material_id);
-          if (!mat) return 0;
-          return Math.floor(mat.current_stock / r.quantity_needed);
-        });
-        return { ...product, stock: Math.min(...stocks) };
+        return { ...product };
       });
 
       setProducts(computedProducts);
@@ -354,7 +349,7 @@ export default function Products() {
                     Harga
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Maks/Min Stok
+                    Stok
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                     Status
