@@ -95,12 +95,12 @@ export default function Dashboard() {
     );
   }
 
-  const stockData = [
-    { id: 'stock-golden-brew', name: 'Golden Brew', stock: paradoseProducts.find(p => p.name === 'Golden Brew')?.stock ?? 0, min: paradoseProducts.find(p => p.name === 'Golden Brew')?.min_stock ?? 0 },
-    { id: 'stock-berrycano', name: 'Berrycano', stock: paradoseProducts.find(p => p.name === 'Berrycano')?.stock ?? 0, min: paradoseProducts.find(p => p.name === 'Berrycano')?.min_stock ?? 0 },
-    { id: 'stock-chocolate', name: 'Chocolate', stock: parasoesProducts.find(p => p.name === 'Chocolate')?.stock ?? 0, min: parasoesProducts.find(p => p.name === 'Chocolate')?.min_stock ?? 0 },
-    { id: 'stock-vanilla', name: 'Vanilla', stock: parasoesProducts.find(p => p.name === 'Vanilla')?.stock ?? 0, min: parasoesProducts.find(p => p.name === 'Vanilla')?.min_stock ?? 0 },
-  ];
+  const stockData = products.map(p => ({
+    id: p.id,
+    name: p.name,
+    stock: p.stock ?? 0,
+    min: p.min_stock ?? 0,
+  }));
 
   const brandDistribution = [
     { id: 'brand-paradose', name: 'Paradose (Coffee)', value: totalParadoseUnits },
