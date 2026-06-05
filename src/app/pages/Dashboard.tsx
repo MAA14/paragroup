@@ -7,109 +7,111 @@ import { supabase } from '../../lib/supabase';
 import imgParadoseLogo from '../../imports/Header/0210f8247ab69f16929c062e8dc995e803d5bd76.png';
 import svgPathsParasoes from '../../imports/Header-2/svg-qlzkjys9tb';
 
+interface ProductItem {
+  id: string;
+  name: string;
+  brand: string;
+  price: number;
+  stock: number;
+  min_stock: number;
+}
+
+interface TransactionItem {
+  id: string;
+  total: number;
+}
+
+interface RawMaterial {
+  id: string;
+  name: string;
+  brand: string;
+  unit: string;
+  current_stock: number;
+  min_stock: number;
+}
+
 export default function Dashboard() {
-  const [paradoseStock, setParadoseStock] = useState({
-    goldenBrew: { current: 45, min: 30 },
-    berrycano: { current: 28, min: 30 },
-    coffeeBeans: { current: 120, min: 50 },
-    milk: { current: 65, min: 40 },
-  });
+  const [products, setProducts] = useState<ProductItem[]>([]);
+  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
+  const [materials, setMaterials] = useState<RawMaterial[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [parasoesStock, setParasoesStock] = useState({
-    chocolate: { current: 35, min: 25 },
-    vanilla: { current: 42, min: 25 },
-    chouxDough: { current: 80, min: 40 },
-    cream: { current: 55, min: 30 },
-  });
+  // Derived values -------------------------------------------------------
+  const paradoseProducts = products.filter(p => p.brand === 'Paradose');
+  const parasoesProducts = products.filter(p => p.brand === 'Parasoes');
 
-  // loading state removed
+  const totalParadoseUnits = paradoseProducts.reduce((sum, p) => sum + (p.stock ?? 0), 0);
+  const totalParasoesUnits = parasoesProducts.reduce((sum, p) => sum + (p.stock ?? 0), 0);
 
+  // Total value per brand (price * stock)
+  const totalParadoseValue = paradoseProducts.reduce((sum, p) => sum + (p.stock ?? 0) * p.price, 0);
+  const totalParasoesValue = parasoesProducts.reduce((sum, p) => sum + (p.stock ?? 0) * p.price, 0);
+
+  const totalRevenue = transactions.reduce((sum, t) => sum + Number(t.total), 0);
+
+  const totalProducts = products.reduce((sum, p) => sum + (p.stock ?? 0), 0);
+
+  // Low stock alerts from products and raw materials
+  const lowStockItems = [
+    ...products.filter(p => (p.stock ?? 0) <= (p.min_stock ?? 0)).map(p => ({
+      name: p.name,
+      brand: p.brand,
+      current_stock: p.stock,
+      min_stock: p.min_stock,
+    })),
+    ...materials.filter(m => m.current_stock <= m.min_stock).map(m => ({
+      name: m.name,
+      brand: m.brand,
+      current_stock: m.current_stock,
+      min_stock: m.min_stock,
+    })),
+  ];
+
+  // Fetch data -----------------------------------------------------------
   useEffect(() => {
-    const fetchInventory = async () => {
-      const { data, error } = await supabase.from('inventory').select('*');
-      if (error) {
-        console.error('Error fetching inventory:', error);
-      } else if (data) {
-        const newParadoseStock = { ...paradoseStock };
-        const newParasoesStock = { ...parasoesStock };
-        
-        data.forEach((item: any) => {
-          if (item.brand === 'Paradose') {
-            if (item.name === 'Golden Brew') newParadoseStock.goldenBrew = { current: item.current_stock, min: item.min_stock };
-            if (item.name === 'Berrycano') newParadoseStock.berrycano = { current: item.current_stock, min: item.min_stock };
-            if (item.name === 'Coffee Beans') newParadoseStock.coffeeBeans = { current: item.current_stock, min: item.min_stock };
-            if (item.name === 'Milk') newParadoseStock.milk = { current: item.current_stock, min: item.min_stock };
-          } else if (item.brand === 'Parasoes') {
-            if (item.name === 'Chocolate') newParasoesStock.chocolate = { current: item.current_stock, min: item.min_stock };
-            if (item.name === 'Vanilla') newParasoesStock.vanilla = { current: item.current_stock, min: item.min_stock };
-            if (item.name === 'Choux Dough') newParasoesStock.chouxDough = { current: item.current_stock, min: item.min_stock };
-            if (item.name === 'Cream') newParasoesStock.cream = { current: item.current_stock, min: item.min_stock };
-          }
-        });
-        
-        setParadoseStock(newParadoseStock);
-        setParasoesStock(newParasoesStock);
-      }
+    const fetchDashboardData = async () => {
+      const { data: productsData, error: productsError } = await supabase.from('products').select('*');
+      const { data: materialsData, error: materialsError } = await supabase.from('raw_materials').select('*');
+      const { data: transactionsData, error: transactionsError } = await supabase.from('transactions').select('id,total');
+
+      if (productsError) console.error('Products fetch error:', productsError);
+      if (materialsError) console.error('Materials fetch error:', materialsError);
+      if (transactionsError) console.error('Transactions fetch error:', transactionsError);
+
+      setProducts(productsData || []);
+      setMaterials(materialsData || []);
+      setTransactions(transactionsData || []);
+      setLoading(false);
     };
-    
-    fetchInventory();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-gray-600">Loading dashboard...</p>
+      </div>
+    );
+  }
+
   const stockData = [
-    {
-      id: 'stock-golden-brew',
-      name: 'Golden Brew',
-      stock: paradoseStock.goldenBrew.current,
-      min: paradoseStock.goldenBrew.min,
-    },
-    {
-      id: 'stock-berrycano',
-      name: 'Berrycano',
-      stock: paradoseStock.berrycano.current,
-      min: paradoseStock.berrycano.min,
-    },
-    {
-      id: 'stock-chocolate',
-      name: 'Chocolate',
-      stock: parasoesStock.chocolate.current,
-      min: parasoesStock.chocolate.min,
-    },
-    {
-      id: 'stock-vanilla',
-      name: 'Vanilla',
-      stock: parasoesStock.vanilla.current,
-      min: parasoesStock.vanilla.min,
-    },
+    { id: 'stock-golden-brew', name: 'Golden Brew', stock: paradoseProducts.find(p => p.name === 'Golden Brew')?.stock ?? 0, min: paradoseProducts.find(p => p.name === 'Golden Brew')?.min_stock ?? 0 },
+    { id: 'stock-berrycano', name: 'Berrycano', stock: paradoseProducts.find(p => p.name === 'Berrycano')?.stock ?? 0, min: paradoseProducts.find(p => p.name === 'Berrycano')?.min_stock ?? 0 },
+    { id: 'stock-chocolate', name: 'Chocolate', stock: parasoesProducts.find(p => p.name === 'Chocolate')?.stock ?? 0, min: parasoesProducts.find(p => p.name === 'Chocolate')?.min_stock ?? 0 },
+    { id: 'stock-vanilla', name: 'Vanilla', stock: parasoesProducts.find(p => p.name === 'Vanilla')?.stock ?? 0, min: parasoesProducts.find(p => p.name === 'Vanilla')?.min_stock ?? 0 },
   ];
 
   const brandDistribution = [
-    {
-      id: 'brand-paradose',
-      name: 'Paradose (Coffee)',
-      value: Object.values(paradoseStock).reduce((sum, item) => sum + item.current, 0)
-    },
-    {
-      id: 'brand-parasoes',
-      name: 'Parasoes (Choux)',
-      value: Object.values(parasoesStock).reduce((sum, item) => sum + item.current, 0)
-    },
+    { id: 'brand-paradose', name: 'Paradose (Coffee)', value: totalParadoseUnits },
+    { id: 'brand-parasoes', name: 'Parasoes (Choux)', value: totalParasoesUnits },
   ];
 
   const COLORS = ['#8B4513', '#F4A460'];
 
-  const lowStockItems = [
-    ...(paradoseStock.berrycano.current <= paradoseStock.berrycano.min ? [{ name: 'Berrycano', brand: 'Paradose', current: paradoseStock.berrycano.current }] : []),
-    ...(parasoesStock.chocolate.current <= parasoesStock.chocolate.min ? [{ name: 'Chocolate Choux', brand: 'Parasoes', current: parasoesStock.chocolate.current }] : []),
-  ];
-
-  const totalParadoseValue = 2500000; // Rp
-  const totalParasoesValue = 1800000; // Rp
-
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-semibold text-gray-900 mb-2">Dashboard Overview</h1>
@@ -117,6 +119,7 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Paradose summary */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="p-3 bg-amber-100 rounded-lg">
@@ -128,11 +131,14 @@ export default function Dashboard() {
             </div>
             <h3 className="text-gray-600 text-sm mb-1">Paradose</h3>
             <p className="text-2xl font-semibold text-gray-900 mb-2">
-              {Object.values(paradoseStock).reduce((sum, item) => sum + item.current, 0)} units
+              {totalParadoseUnits} units
             </p>
-            <p className="text-sm text-gray-500">Total Inventory Value: Rp {totalParadoseValue.toLocaleString('id-ID')}</p>
+            <p className="text-sm text-gray-500">
+              Total Inventory Value: Rp {totalParadoseValue.toLocaleString('id-ID')}
+            </p>
           </div>
 
+          {/* Parasoes summary */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="p-3 bg-orange-100 rounded-lg">
@@ -144,11 +150,14 @@ export default function Dashboard() {
             </div>
             <h3 className="text-gray-600 text-sm mb-1">Parasoes</h3>
             <p className="text-2xl font-semibold text-gray-900 mb-2">
-              {Object.values(parasoesStock).reduce((sum, item) => sum + item.current, 0)} units
+              {totalParasoesUnits} units
             </p>
-            <p className="text-sm text-gray-500">Total Inventory Value: Rp {totalParasoesValue.toLocaleString('id-ID')}</p>
+            <p className="text-sm text-gray-500">
+              Total Inventory Value: Rp {totalParasoesValue.toLocaleString('id-ID')}
+            </p>
           </div>
 
+          {/* Total Revenue */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="p-3 bg-green-100 rounded-lg">
@@ -157,7 +166,7 @@ export default function Dashboard() {
             </div>
             <h3 className="text-gray-600 text-sm mb-1">Total Revenue</h3>
             <p className="text-2xl font-semibold text-gray-900 mb-2">
-              Rp {(totalParadoseValue + totalParasoesValue).toLocaleString('id-ID')}
+              Rp {totalRevenue.toLocaleString('id-ID')}
             </p>
             <p className="text-sm text-green-600 flex items-center gap-1">
               <TrendingUp className="w-4 h-4" />
@@ -165,6 +174,7 @@ export default function Dashboard() {
             </p>
           </div>
 
+          {/* Total Products */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="p-3 bg-blue-100 rounded-lg">
@@ -173,13 +183,13 @@ export default function Dashboard() {
             </div>
             <h3 className="text-gray-600 text-sm mb-1">Total Products</h3>
             <p className="text-2xl font-semibold text-gray-900 mb-2">
-              {Object.values(paradoseStock).reduce((sum, item) => sum + item.current, 0) +
-                Object.values(parasoesStock).reduce((sum, item) => sum + item.current, 0)}
+              {totalProducts}
             </p>
             <p className="text-sm text-gray-500">Across 2 brands</p>
           </div>
         </div>
 
+        {/* Low Stock Alerts */}
         {lowStockItems.length > 0 && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-8">
             <div className="flex items-start gap-3">
@@ -193,7 +203,7 @@ export default function Dashboard() {
                         <span className="font-medium text-gray-900">{item.name}</span>
                         <span className="text-gray-500 ml-2">({item.brand})</span>
                       </div>
-                      <span className="text-red-600 font-medium">{item.current} units remaining</span>
+                      <span className="text-red-600 font-medium">{item.current_stock}/{item.min_stock} units remaining</span>
                     </div>
                   ))}
                 </div>
@@ -202,18 +212,19 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <h3 className="font-semibold text-gray-900 mb-6">Product Stock Levels</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={stockData} key="stock-bar-chart">
-                <CartesianGrid strokeDasharray="3 3" key="stock-grid" />
-                <XAxis dataKey="name" key="stock-xaxis" />
-                <YAxis key="stock-yaxis" />
-                <Tooltip key="stock-tooltip" />
-                <Legend key="stock-legend" />
-                <Bar dataKey="stock" fill="#374151" name="Current Stock" key="bar-current-stock" />
-                <Bar dataKey="min" fill="#9CA3AF" name="Minimum Stock" key="bar-min-stock" />
+              <BarChart data={stockData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="stock" fill="#374151" name="Current Stock" />
+                <Bar dataKey="min" fill="#9CA3AF" name="Minimum Stock" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -221,7 +232,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <h3 className="font-semibold text-gray-900 mb-6">Brand Distribution</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <PieChart key="brand-pie-chart">
+              <PieChart>
                 <Pie
                   data={brandDistribution}
                   cx="50%"
@@ -231,30 +242,24 @@ export default function Dashboard() {
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="value"
-                  key="pie-brand-distribution"
                 >
-                  {brandDistribution.map((entry) => (
-                    <Cell key={entry.id} fill={COLORS[brandDistribution.indexOf(entry) % COLORS.length]} />
+                  {brandDistribution.map((entry, idx) => (
+                    <Cell key={entry.id} fill={COLORS[idx % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip key="brand-tooltip" />
+                <Tooltip />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
 
+        {/* Brand Logos */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <Link to="/paradose" className="block group hover:opacity-90 transition-opacity">
             <div className="bg-white rounded-lg border border-gray-200 p-12 hover:shadow-lg transition-shadow flex items-center justify-center min-h-[200px]">
-              <img
-                src={imgParadoseLogo}
-                alt="Paradose Logo"
-                className="max-w-full h-auto object-contain"
-                style={{ maxHeight: '150px' }}
-              />
+              <img src={imgParadoseLogo} alt="Paradose Logo" className="max-w-full h-auto object-contain" style={{ maxHeight: '150px' }} />
             </div>
           </Link>
-
           <Link to="/parasoes" className="block group hover:opacity-90 transition-opacity">
             <div className="bg-white rounded-lg border border-gray-200 p-12 hover:shadow-lg transition-shadow flex items-center justify-center min-h-[200px]">
               <div className="relative flex items-center justify-center" style={{ width: '250px', height: '50px' }}>
