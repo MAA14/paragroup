@@ -4,6 +4,7 @@ import svgPaths from "../../imports/MainContent/svg-n0e2pi4v59";
 import { AlertCircle, Plus, X, Save, Trash2, Edit } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
+import { useInventory } from "../contexts/InventoryContext";
 
 interface RawMaterial {
   id: string;
@@ -51,6 +52,7 @@ export default function Paradose() {
   const [deletingItemName, setDeletingItemName] = useState<string>("");
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const { refreshInventory } = useInventory();
   const [newMaterial, setNewMaterial] = useState({
     name: "",
     unit: "",
@@ -173,6 +175,14 @@ export default function Paradose() {
       }
 
       toast.success("Perubahan berhasil disimpan!");
+      // Refresh inventory context to sync POS view
+      if (typeof refreshInventory === 'function') {
+        refreshInventory();
+      }
+      // Refresh inventory context to sync POS view
+      if (typeof refreshInventory === 'function') {
+        refreshInventory();
+      }
       setHasChanges(false);
       setChangedMaterialIds(new Set());
       setChangedProductIds(new Set());

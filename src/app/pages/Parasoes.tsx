@@ -4,6 +4,7 @@ import imgParasoesLogo from "../../imports/Group13/f6093fbbd983e79f9517960d32349
 import { AlertCircle, Plus, X, Save, Trash2, Edit } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../../lib/supabase";
+import { useInventory } from "../contexts/InventoryContext";
 
 interface RawMaterial {
   id: string;
@@ -57,6 +58,7 @@ export default function Parasoes() {
     current_stock: 0,
     min_stock: 0,
   });
+  const { refreshInventory } = useInventory();
   const [editForm, setEditForm] = useState({
     name: "",
     unit: "",
@@ -173,6 +175,10 @@ export default function Parasoes() {
       }
 
       toast.success("Perubahan berhasil disimpan!");
+      // Refresh inventory to sync POS view
+      if (typeof refreshInventory === 'function') {
+        refreshInventory();
+      }
       setHasChanges(false);
       setChangedMaterialIds(new Set());
       setChangedProductIds(new Set());

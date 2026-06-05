@@ -26,6 +26,7 @@ interface InventoryContextType {
   checkout: (items: any[], transactionData: any) => Promise<void>;
   isProductAvailable: (productId: string) => boolean;
   loading: boolean;
+  refreshInventory: () => Promise<void>;
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
@@ -68,7 +69,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const computedProducts = prods?.map((product: any) => {
       const prodRecipe = recObj[product.id];
       if (!prodRecipe || Object.keys(prodRecipe).length === 0) {
-        return { ...product, stock: product.stock } as Product;
+        // If product corresponds to a raw material, use its current_stock
+        const rawMaterialStock = stocksObj[product.id]?.current_stock;
+        return { ...product, stock: rawMaterialStock !== undefined ? rawMaterialStock : product.stock } as Product;
       }
       const matStocks = Object.entries(prodRecipe).map(([matId, needed]) => {
         const available = stocksObj[matId]?.current_stock || 0;
@@ -106,7 +109,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const computed = products.map(product => {
       const prodRecipe = recipes[product.id];
       if (!prodRecipe || Object.keys(prodRecipe).length === 0) {
-        return product;
+        // Sync stock with raw material if applicable
+        const rawMaterialStock = stocks[product.id]?.current_stock;
+        return rawMaterialStock !== undefined ? { ...product, stock: rawMaterialStock } as Product : product;
       }
       const matStocks = Object.entries(prodRecipe).map(([matId, needed]) => {
         const available = stocks[matId]?.current_stock || 0;
@@ -223,9 +228,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
+  const refreshInventory = async () => {
+    await fetchData();
+  };
+
   return (
     <InventoryContext.Provider
-      value={{ stocks, products, updateStock, checkout, isProductAvailable, loading }}
+      value={{ stocks, products, updateStock, checkout, isProductAvailable, loading, refreshInventory }}
     >
       {children}
     </InventoryContext.Provider>
